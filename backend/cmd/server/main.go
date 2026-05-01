@@ -34,6 +34,7 @@ func main() {
 	productRepo := repository.NewProductRepo(database)
 	promoRepo := repository.NewPromoRepo(database)
 	orderRepo := repository.NewOrderRepo(database)
+	wishlistRepo := repository.NewWishlistRepo(database)
 
 	// Services
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
@@ -43,6 +44,7 @@ func main() {
 	authH := handler.NewAuthHandler(authSvc)
 	catalogueH := handler.NewCatalogueHandler(productRepo)
 	orderH := handler.NewOrderHandler(orderSvc, promoRepo, orderRepo)
+	wishlistH := handler.NewWishlistHandler(wishlistRepo)
 
 	r := gin.Default()
 	r.Static("/uploads", cfg.UploadsDir)
@@ -66,6 +68,9 @@ func main() {
 		user := api.Group("/user", middleware.AuthRequired(cfg.JWTSecret))
 		user.GET("/orders", orderH.GetUserOrders)
 		user.GET("/orders/:id", orderH.GetUserOrder)
+		user.GET("/wishlist", wishlistH.Get)
+		user.POST("/wishlist/:product_id", wishlistH.Add)
+		user.DELETE("/wishlist/:product_id", wishlistH.Remove)
 	}
 
 	log.Printf("Listening on :%s", cfg.Port)
