@@ -20,8 +20,8 @@ func AuthRequired(secret string) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 			return
 		}
-		c.Set("userID", claims.UserID)
-		c.Set("userRole", claims.Role)
+		c.Set(CtxKeyUserID, claims.UserID)
+		c.Set(CtxKeyUserRole, claims.Role)
 		c.Next()
 	}
 }

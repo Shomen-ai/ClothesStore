@@ -13,6 +13,9 @@ type Claims struct {
 }
 
 func GenerateAccessToken(userID int64, role, secret string) (string, error) {
+	if secret == "" {
+		return "", fmt.Errorf("jwt: secret must not be empty")
+	}
 	claims := Claims{
 		UserID: userID,
 		Role:   role,
@@ -26,6 +29,9 @@ func GenerateAccessToken(userID int64, role, secret string) (string, error) {
 }
 
 func GenerateRefreshToken(userID int64, secret string) (string, error) {
+	if secret == "" {
+		return "", fmt.Errorf("jwt: secret must not be empty")
+	}
 	claims := Claims{
 		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -38,6 +44,9 @@ func GenerateRefreshToken(userID int64, secret string) (string, error) {
 }
 
 func ValidateToken(tokenStr, secret string) (*Claims, error) {
+	if secret == "" {
+		return nil, fmt.Errorf("jwt: secret must not be empty")
+	}
 	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])

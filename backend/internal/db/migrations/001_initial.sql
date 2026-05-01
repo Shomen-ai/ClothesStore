@@ -112,3 +112,17 @@ CREATE TABLE wishlist (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT wishlist_unique UNIQUE (user_id, product_id)
 );
+
+-- Foreign key indexes (Oracle does not auto-index FK columns)
+CREATE INDEX idx_addresses_user_id ON addresses(user_id);
+CREATE INDEX idx_products_category_id ON products(category_id);
+CREATE INDEX idx_product_sizes_product_id ON product_sizes(product_id);
+CREATE INDEX idx_product_images_product_id ON product_images(product_id);
+CREATE INDEX idx_orders_user_id ON orders(user_id);
+CREATE INDEX idx_orders_address_id ON orders(address_id);
+CREATE INDEX idx_orders_promo_code_id ON orders(promo_code_id);
+CREATE INDEX idx_order_items_order_id ON order_items(order_id);
+CREATE INDEX idx_order_items_product_id ON order_items(product_id);
+CREATE INDEX idx_order_items_product_size_id ON order_items(product_size_id);
+CREATE INDEX idx_wishlist_user_id ON wishlist(user_id);
+CREATE INDEX idx_wishlist_product_id ON wishlist(product_id);
