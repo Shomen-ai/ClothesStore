@@ -45,6 +45,7 @@ func main() {
 	catalogueH := handler.NewCatalogueHandler(productRepo)
 	orderH := handler.NewOrderHandler(orderSvc, promoRepo, orderRepo)
 	wishlistH := handler.NewWishlistHandler(wishlistRepo)
+	userH := handler.NewUserHandler(userRepo)
 
 	r := gin.Default()
 	r.Static("/uploads", cfg.UploadsDir)
@@ -71,6 +72,12 @@ func main() {
 		user.GET("/wishlist", wishlistH.Get)
 		user.POST("/wishlist/:product_id", wishlistH.Add)
 		user.DELETE("/wishlist/:product_id", wishlistH.Remove)
+		user.GET("/profile", userH.GetProfile)
+		user.PUT("/profile", userH.UpdateProfile)
+		user.GET("/addresses", userH.GetAddresses)
+		user.POST("/addresses", userH.CreateAddress)
+		user.PUT("/addresses/:id", userH.UpdateAddress)
+		user.DELETE("/addresses/:id", userH.DeleteAddress)
 	}
 
 	log.Printf("Listening on :%s", cfg.Port)
