@@ -17,7 +17,7 @@ func (r *ProductRepo) GetCategories() ([]model.Category, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var cats []model.Category
+	cats := make([]model.Category, 0)
 	for rows.Next() {
 		var c model.Category
 		if err := rows.Scan(&c.ID, &c.Name, &c.Slug, &c.SortOrder); err != nil {
@@ -109,7 +109,7 @@ func (r *ProductRepo) List(f ProductFilter) ([]model.Product, error) {
 	}
 	defer rows.Close()
 
-	var products []model.Product
+	products := make([]model.Product, 0)
 	for rows.Next() {
 		var p model.Product
 		var isActive int
@@ -198,22 +198,20 @@ func (r *ProductRepo) Delete(id int64) error {
 }
 
 func (r *ProductRepo) UpsertSize(s *model.ProductSize) error {
-	var existing int64
-	err := r.db.QueryRow(
-		`SELECT id FROM product_sizes WHERE product_id=:1 AND size=:2`, s.ProductID, s.Size,
-	).Scan(&existing)
-	if err == sql.ErrNoRows {
-		return r.db.QueryRow(
-			`INSERT INTO product_sizes(product_id,size,stock_qty) VALUES(:1,:2,:3) RETURNING id INTO :4`,
-			s.ProductID, s.Size, s.StockQty, &s.ID,
-		).Err()
-	}
+	_, err := r.db.Exec(
+		`MERGE INTO product_sizes dst
+		 USING (SELECT :1 AS product_id, :2 AS size FROM dual) src
+		   ON (dst.product_id = src.product_id AND dst.size = src.size)
+		 WHEN MATCHED THEN UPDATE SET dst.stock_qty = :3
+		 WHEN NOT MATCHED THEN INSERT (product_id, size, stock_qty) VALUES (:4, :5, :6)`,
+		s.ProductID, s.Size, s.StockQty, s.ProductID, s.Size, s.StockQty,
+	)
 	if err != nil {
 		return err
 	}
-	_, err = r.db.Exec(`UPDATE product_sizes SET stock_qty=:1 WHERE id=:2`, s.StockQty, existing)
-	s.ID = existing
-	return err
+	return r.db.QueryRow(
+		`SELECT id FROM product_sizes WHERE product_id=:1 AND size=:2`, s.ProductID, s.Size,
+	).Scan(&s.ID)
 }
 
 func (r *ProductRepo) AddImage(img *model.ProductImage) error {
@@ -235,6 +233,8 @@ func (r *ProductRepo) DeleteImage(id, productID int64) (string, error) {
 }
 
 func (r *ProductRepo) GetFeatured() (hits []model.Product, newest []model.Product, err error) {
+	hits = make([]model.Product, 0)
+	newest = make([]model.Product, 0)
 	hitRows, err := r.db.Query(
 		`SELECT p.id,p.category_id,p.name,p.description,p.price,p.is_active,p.created_at
 		 FROM products p

@@ -57,7 +57,8 @@ CREATE TABLE product_sizes (
   id         NUMBER DEFAULT product_sizes_seq.NEXTVAL PRIMARY KEY,
   product_id NUMBER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   size       VARCHAR2(10) NOT NULL,
-  stock_qty  NUMBER DEFAULT 0
+  stock_qty  NUMBER DEFAULT 0,
+  CONSTRAINT product_sizes_unique UNIQUE (product_id, size)
 );
 
 -- Product images
