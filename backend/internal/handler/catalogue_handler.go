@@ -1,17 +1,13 @@
 package handler
 
 import (
-	"database/sql"
-	"errors"
 	"net/http"
 	"strconv"
 	"clothes-store/internal/repository"
 	"github.com/gin-gonic/gin"
 )
 
-type CatalogueHandler struct {
-	repo *repository.ProductRepo
-}
+type CatalogueHandler struct{ repo *repository.ProductRepo }
 
 func NewCatalogueHandler(repo *repository.ProductRepo) *CatalogueHandler {
 	return &CatalogueHandler{repo: repo}
@@ -20,103 +16,46 @@ func NewCatalogueHandler(repo *repository.ProductRepo) *CatalogueHandler {
 func (h *CatalogueHandler) GetCategories(c *gin.Context) {
 	cats, err := h.repo.GetCategories()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"categories": cats})
+	c.JSON(http.StatusOK, cats)
 }
 
 func (h *CatalogueHandler) ListProducts(c *gin.Context) {
-	f := repository.ProductFilter{}
-
-	if v := c.Query("category_id"); v != "" {
-		id, err := strconv.ParseInt(v, 10, 64)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid category_id"})
-			return
-		}
-		f.CategoryID = &id
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	catID, _ := strconv.ParseInt(c.Query("category"), 10, 64)
+	f := repository.ProductFilter{
+		CategoryID: catID,
+		Size:       c.Query("size"),
+		Search:     c.Query("q"),
+		Sort:       c.Query("sort"),
+		Page:       page,
+		PageSize:   24,
 	}
-	if v := c.Query("min_price"); v != "" {
-		p, err := strconv.ParseFloat(v, 64)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid min_price"})
-			return
-		}
-		f.MinPrice = &p
-	}
-	if v := c.Query("max_price"); v != "" {
-		p, err := strconv.ParseFloat(v, 64)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid max_price"})
-			return
-		}
-		f.MaxPrice = &p
-	}
-	f.Search = c.Query("search")
-
-	if v := c.Query("page"); v != "" {
-		page, err := strconv.Atoi(v)
-		if err != nil || page < 1 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid page"})
-			return
-		}
-		f.Page = page
-	}
-	if v := c.Query("page_size"); v != "" {
-		ps, err := strconv.Atoi(v)
-		if err != nil || ps < 1 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid page_size"})
-			return
-		}
-		f.PageSize = ps
-	}
-
-	products, total, err := h.repo.List(f)
+	products, err := h.repo.List(f)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"products": products,
-		"total":    total,
-		"page":     f.Page,
-		"page_size": f.PageSize,
-	})
+	c.JSON(http.StatusOK, products)
 }
 
 func (h *CatalogueHandler) GetProduct(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
+	id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 	p, err := h.repo.GetByID(id)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "product not found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
 	c.JSON(http.StatusOK, p)
 }
 
 func (h *CatalogueHandler) GetFeatured(c *gin.Context) {
-	limit := 8
-	if v := c.Query("limit"); v != "" {
-		l, err := strconv.Atoi(v)
-		if err != nil || l < 1 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid limit"})
-			return
-		}
-		limit = l
-	}
-	products, err := h.repo.GetFeatured(limit)
+	hits, newest, err := h.repo.GetFeatured()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"products": products})
+	c.JSON(http.StatusOK, gin.H{"hits": hits, "new": newest})
 }
