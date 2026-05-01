@@ -30,12 +30,14 @@ func main() {
 
 	// Repos
 	userRepo := repository.NewUserRepo(database)
+	productRepo := repository.NewProductRepo(database)
 
 	// Services
 	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
 
 	// Handlers
 	authH := handler.NewAuthHandler(authSvc)
+	catalogueH := handler.NewCatalogueHandler(productRepo)
 
 	r := gin.Default()
 	r.Static("/uploads", cfg.UploadsDir)
@@ -46,6 +48,11 @@ func main() {
 		auth.POST("/register", authH.Register)
 		auth.POST("/login", authH.Login)
 		auth.POST("/refresh", authH.Refresh)
+
+		api.GET("/categories", catalogueH.GetCategories)
+		api.GET("/products/featured", catalogueH.GetFeatured)
+		api.GET("/products", catalogueH.ListProducts)
+		api.GET("/products/:id", catalogueH.GetProduct)
 	}
 
 	log.Printf("Listening on :%s", cfg.Port)
