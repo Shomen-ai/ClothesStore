@@ -9,6 +9,7 @@ import (
 	"clothes-store/internal/middleware"
 	"clothes-store/internal/repository"
 	"clothes-store/internal/service"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -30,26 +31,36 @@ func main() {
 	}
 
 	// Repos
-	userRepo := repository.NewUserRepo(database)
-	productRepo := repository.NewProductRepo(database)
-	promoRepo := repository.NewPromoRepo(database)
-	orderRepo := repository.NewOrderRepo(database)
+	userRepo     := repository.NewUserRepo(database)
+	productRepo  := repository.NewProductRepo(database)
+	promoRepo    := repository.NewPromoRepo(database)
+	orderRepo    := repository.NewOrderRepo(database)
 	wishlistRepo := repository.NewWishlistRepo(database)
+	statsRepo    := repository.NewStatsRepo(database)
 
 	// Services
-	authSvc := service.NewAuthService(userRepo, cfg.JWTSecret)
-	orderSvc := service.NewOrderService(orderRepo, productRepo, promoRepo)
+	authSvc   := service.NewAuthService(userRepo, cfg.JWTSecret)
+	orderSvc  := service.NewOrderService(orderRepo, productRepo, promoRepo)
+	uploadSvc := service.NewUploadService(cfg.UploadsDir)
 
 	// Handlers
-	authH := handler.NewAuthHandler(authSvc)
-	catalogueH := handler.NewCatalogueHandler(productRepo)
-	orderH := handler.NewOrderHandler(orderSvc, promoRepo, orderRepo)
-	wishlistH := handler.NewWishlistHandler(wishlistRepo)
-	userH := handler.NewUserHandler(userRepo)
-	uploadSvc := service.NewUploadService(cfg.UploadsDir)
+	authH         := handler.NewAuthHandler(authSvc)
+	catalogueH    := handler.NewCatalogueHandler(productRepo)
+	orderH        := handler.NewOrderHandler(orderSvc, promoRepo, orderRepo)
+	wishlistH     := handler.NewWishlistHandler(wishlistRepo)
+	userH         := handler.NewUserHandler(userRepo)
 	adminProductH := handler.NewAdminProductHandler(productRepo, uploadSvc)
+	adminOrderH   := handler.NewAdminOrderHandler(orderRepo)
+	adminPromoH   := handler.NewAdminPromoHandler(promoRepo)
+	adminStatsH   := handler.NewAdminStatsHandler(statsRepo)
 
 	r := gin.Default()
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:5173"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Authorization", "Content-Type"},
+		AllowCredentials: true,
+	}))
 	r.Static("/uploads", cfg.UploadsDir)
 
 	api := r.Group("/api")
@@ -92,6 +103,16 @@ func main() {
 		admin.POST("/categories", adminProductH.CreateCategory)
 		admin.PUT("/categories/:id", adminProductH.UpdateCategory)
 		admin.DELETE("/categories/:id", adminProductH.DeleteCategory)
+		admin.GET("/orders", adminOrderH.List)
+		admin.GET("/orders/:id", adminOrderH.Get)
+		admin.PUT("/orders/:id/status", adminOrderH.UpdateStatus)
+		admin.GET("/promo-codes", adminPromoH.List)
+		admin.POST("/promo-codes", adminPromoH.Create)
+		admin.PUT("/promo-codes/:id/deactivate", adminPromoH.Deactivate)
+		admin.DELETE("/promo-codes/:id", adminPromoH.Delete)
+		admin.GET("/stats/revenue", adminStatsH.Revenue)
+		admin.GET("/stats/orders", adminStatsH.Orders)
+		admin.GET("/stats/promo-codes", adminStatsH.Promos)
 	}
 
 	log.Printf("Listening on :%s", cfg.Port)
