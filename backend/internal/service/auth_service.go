@@ -3,11 +3,14 @@ package service
 import (
 	"database/sql"
 	"errors"
+	"strings"
 	"clothes-store/internal/model"
 	"clothes-store/internal/repository"
 	appjwt "clothes-store/pkg/jwt"
 	"golang.org/x/crypto/bcrypt"
 )
+
+var ErrEmailTaken = errors.New("email already registered")
 
 type AuthService struct {
 	userRepo  *repository.UserRepo
@@ -30,6 +33,9 @@ func (s *AuthService) Register(email, password, name, phone string) (*model.User
 	}
 	u := &model.User{Email: email, PasswordHash: string(hash), Name: name, Phone: phone, Role: "customer"}
 	if err := s.userRepo.Create(u); err != nil {
+		if strings.Contains(err.Error(), "ORA-00001") {
+			return nil, nil, ErrEmailTaken
+		}
 		return nil, nil, err
 	}
 	pair, err := s.generatePair(u.ID, u.Role)

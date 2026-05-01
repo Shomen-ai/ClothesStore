@@ -6,7 +6,6 @@ import (
 	"clothes-store/internal/config"
 	"clothes-store/internal/db"
 	"clothes-store/internal/handler"
-	"clothes-store/internal/middleware"
 	"clothes-store/internal/repository"
 	"clothes-store/internal/service"
 	"github.com/gin-gonic/gin"
@@ -47,10 +46,6 @@ func main() {
 		auth.POST("/register", authH.Register)
 		auth.POST("/login", authH.Login)
 		auth.POST("/refresh", authH.Refresh)
-
-		// Protected routes placeholder
-		_ = middleware.AuthRequired(cfg.JWTSecret)
-		_ = middleware.AdminRequired()
 	}
 
 	log.Printf("Listening on :%s", cfg.Port)

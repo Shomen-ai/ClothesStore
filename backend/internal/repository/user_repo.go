@@ -84,6 +84,9 @@ func (r *UserRepo) GetAddresses(userID int64) ([]model.Address, error) {
 		a.IsDefault = def == 1
 		addrs = append(addrs, a)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return addrs, nil
 }
 
@@ -102,12 +105,18 @@ func (r *UserRepo) DeleteAddress(id, userID int64) error {
 }
 
 func (r *UserRepo) SetDefaultAddress(id, userID int64) error {
-	_, err := r.db.Exec(`UPDATE addresses SET is_default=0 WHERE user_id=:1`, userID)
+	tx, err := r.db.Begin()
 	if err != nil {
 		return err
 	}
-	_, err = r.db.Exec(`UPDATE addresses SET is_default=1 WHERE id=:1 AND user_id=:2`, id, userID)
-	return err
+	defer tx.Rollback()
+	if _, err = tx.Exec(`UPDATE addresses SET is_default=0 WHERE user_id=:1`, userID); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(`UPDATE addresses SET is_default=1 WHERE id=:1 AND user_id=:2`, id, userID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func boolToInt(b bool) int {

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"clothes-store/internal/service"
 	"github.com/gin-gonic/gin"
@@ -23,7 +24,11 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 	user, tokens, err := h.svc.Register(req.Email, req.Password, req.Name, req.Phone)
 	if err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		if errors.Is(err, service.ErrEmailTaken) {
+			c.JSON(http.StatusConflict, gin.H{"error": "email already registered"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"user": user, "tokens": tokens})
