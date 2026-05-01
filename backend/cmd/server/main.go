@@ -46,6 +46,8 @@ func main() {
 	orderH := handler.NewOrderHandler(orderSvc, promoRepo, orderRepo)
 	wishlistH := handler.NewWishlistHandler(wishlistRepo)
 	userH := handler.NewUserHandler(userRepo)
+	uploadSvc := service.NewUploadService(cfg.UploadsDir)
+	adminProductH := handler.NewAdminProductHandler(productRepo, uploadSvc)
 
 	r := gin.Default()
 	r.Static("/uploads", cfg.UploadsDir)
@@ -78,6 +80,18 @@ func main() {
 		user.POST("/addresses", userH.CreateAddress)
 		user.PUT("/addresses/:id", userH.UpdateAddress)
 		user.DELETE("/addresses/:id", userH.DeleteAddress)
+
+		admin := api.Group("/admin", middleware.AuthRequired(cfg.JWTSecret), middleware.AdminRequired())
+		admin.GET("/products", adminProductH.ListProducts)
+		admin.POST("/products", adminProductH.CreateProduct)
+		admin.PUT("/products/:id", adminProductH.UpdateProduct)
+		admin.DELETE("/products/:id", adminProductH.DeleteProduct)
+		admin.POST("/products/:id/images", adminProductH.UploadImage)
+		admin.DELETE("/products/:id/images/:img_id", adminProductH.DeleteImage)
+		admin.GET("/categories", adminProductH.ListCategories)
+		admin.POST("/categories", adminProductH.CreateCategory)
+		admin.PUT("/categories/:id", adminProductH.UpdateCategory)
+		admin.DELETE("/categories/:id", adminProductH.DeleteCategory)
 	}
 
 	log.Printf("Listening on :%s", cfg.Port)
