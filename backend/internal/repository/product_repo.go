@@ -232,6 +232,16 @@ func (r *ProductRepo) DeleteImage(id, productID int64) (string, error) {
 	return path, err
 }
 
+func (r *ProductRepo) GetProductPriceForSize(sizeID int64, minQty int) (productID int64, price float64, err error) {
+	err = r.db.QueryRow(
+		`SELECT p.id, p.price FROM products p
+		 JOIN product_sizes ps ON ps.product_id=p.id
+		 WHERE ps.id=:1 AND p.is_active=1 AND ps.stock_qty>=:2`,
+		sizeID, minQty,
+	).Scan(&productID, &price)
+	return
+}
+
 func (r *ProductRepo) GetFeatured() (hits []model.Product, newest []model.Product, err error) {
 	hits = make([]model.Product, 0)
 	newest = make([]model.Product, 0)
