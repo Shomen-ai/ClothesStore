@@ -47,7 +47,7 @@ func ValidateToken(tokenStr, secret string) (*Claims, error) {
 	if secret == "" {
 		return nil, fmt.Errorf("jwt: secret must not be empty")
 	}
-	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (interface{}, error) {
+	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
