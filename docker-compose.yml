@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: clothesstore
+      POSTGRES_USER: store
+      POSTGRES_PASSWORD: store
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/internal/db/migrations/001_initial.sql:/docker-entrypoint-initdb.d/001_initial.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U store -d clothesstore"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    environment:
+      DB_CONN_STR: postgres://store:store@db:5432/clothesstore?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:-changeme-in-production}
+      PORT: 8080
+      UPLOADS_DIR: /uploads
+    volumes:
+      - uploads:/uploads
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  uploads:
