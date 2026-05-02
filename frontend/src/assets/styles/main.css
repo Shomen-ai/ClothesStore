@@ -1,0 +1,62 @@
+:root {
+  --color-bg:          #0a0a0a;
+  --color-bg-surface:  #141414;
+  --color-bg-elevated: #1e1e1e;
+  --color-border:      #2a2a2a;
+  --color-red:         #cc2200;
+  --color-red-dark:    #8b0000;
+  --color-red-hover:   #e02800;
+  --color-text:        #f0f0f0;
+  --color-text-muted:  #888;
+  --color-success:     #3d8b3d;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: 'Inter', system-ui, sans-serif;
+  min-height: 100vh;
+}
+
+a { color: var(--color-red); text-decoration: none; }
+a:hover { color: var(--color-red-hover); }
+
+/* Element Plus overrides */
+.el-button--primary {
+  --el-button-bg-color: var(--color-red) !important;
+  --el-button-border-color: var(--color-red) !important;
+  --el-button-hover-bg-color: var(--color-red-hover) !important;
+}
+
+.el-input__wrapper {
+  background-color: var(--color-bg-surface) !important;
+  box-shadow: 0 0 0 1px var(--color-border) inset !important;
+}
+
+.el-input__inner { color: var(--color-text) !important; }
+
+.el-form-item__label { color: var(--color-text-muted) !important; }
+
+.el-table {
+  --el-table-bg-color: var(--color-bg-surface) !important;
+  --el-table-tr-bg-color: var(--color-bg-surface) !important;
+  --el-table-header-bg-color: var(--color-bg-elevated) !important;
+  --el-table-text-color: var(--color-text) !important;
+  --el-table-border-color: var(--color-border) !important;
+}
+
+.el-dialog {
+  --el-dialog-bg-color: var(--color-bg-surface) !important;
+  --el-dialog-title-font-size: 16px;
+}
+
+.el-card {
+  --el-card-bg-color: var(--color-bg-surface) !important;
+  --el-card-border-color: var(--color-border) !important;
+}
+
+.el-select-dropdown {
+  --el-bg-color-overlay: var(--color-bg-elevated) !important;
+}

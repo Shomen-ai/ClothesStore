@@ -1,0 +1,31 @@
+<template>
+  <div>
+    <h2 class="section-title">ИЗБРАННОЕ</h2>
+    <div v-if="items.length === 0" class="empty">Список пуст</div>
+    <div v-else class="product-grid">
+      <ProductCard v-for="p in items" :key="p.id" :product="p" />
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue'
+import { getWishlist } from '@/api/user.js'
+import { useWishlistStore } from '@/stores/wishlist.js'
+import ProductCard from '@/components/catalogue/ProductCard.vue'
+
+const items = ref([])
+const wishlist = useWishlistStore()
+
+onMounted(async () => {
+  await wishlist.load()
+  const { data } = await getWishlist()
+  items.value = data || []
+})
+</script>
+
+<style scoped>
+.section-title { font-size: 20px; font-weight: 700; letter-spacing: 3px; margin-bottom: 32px; }
+.empty { color: var(--color-text-muted); }
+.product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 24px; }
+</style>

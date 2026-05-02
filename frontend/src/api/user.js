@@ -1,0 +1,12 @@
+import api from './axios.js'
+export const getProfile = () => api.get('/user/profile')
+export const updateProfile = (data) => api.put('/user/profile', data)
+export const getAddresses = () => api.get('/user/addresses')
+export const createAddress = (data) => api.post('/user/addresses', data)
+export const updateAddress = (id, data) => api.put(`/user/addresses/${id}`, data)
+export const deleteAddress = (id) => api.delete(`/user/addresses/${id}`)
+export const getWishlist = () => api.get('/user/wishlist')
+export const addToWishlist = (id) => api.post(`/user/wishlist/${id}`)
+export const removeFromWishlist = (id) => api.delete(`/user/wishlist/${id}`)
+export const getUserOrders = () => api.get('/user/orders')
+export const getUserOrder = (id) => api.get(`/user/orders/${id}`)
