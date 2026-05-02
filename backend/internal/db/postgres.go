@@ -4,11 +4,11 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
-	_ "github.com/godror/godror"
+	_ "github.com/lib/pq"
 )
 
 func Connect(connStr string) (*sql.DB, error) {
-	db, err := sql.Open("godror", connStr)
+	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		return nil, fmt.Errorf("open: %w", err)
 	}
