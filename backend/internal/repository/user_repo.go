@@ -114,10 +114,3 @@ func (r *UserRepo) SetDefaultAddress(id, userID int64) error {
 	}
 	return tx.Commit()
 }
-
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
-}

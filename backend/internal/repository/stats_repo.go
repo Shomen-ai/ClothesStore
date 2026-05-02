@@ -3,7 +3,6 @@ package repository
 import (
 	"database/sql"
 	"fmt"
-	"time"
 )
 
 type StatsRepo struct{ db *sql.DB }
@@ -32,18 +31,15 @@ type PromoStat struct {
 }
 
 func (r *StatsRepo) periodCondition(period string) string {
-	now := time.Now()
 	switch period {
 	case "day":
-		return "AND created_at >= TRUNC(SYSDATE)"
+		return "AND created_at >= CURRENT_DATE"
 	case "week":
-		return "AND created_at >= TRUNC(SYSDATE) - 7"
+		return "AND created_at >= CURRENT_DATE - INTERVAL '7 days'"
 	case "month":
-		return "AND created_at >= ADD_MONTHS(TRUNC(SYSDATE,'MM'),0)"
+		return "AND created_at >= date_trunc('month', CURRENT_DATE)"
 	case "quarter":
-		q := (int(now.Month()) - 1) / 3
-		start := time.Date(now.Year(), time.Month(q*3+1), 1, 0, 0, 0, 0, now.Location())
-		return fmt.Sprintf("AND created_at >= TO_TIMESTAMP('%s','YYYY-MM-DD')", start.Format("2006-01-02"))
+		return "AND created_at >= date_trunc('quarter', CURRENT_DATE)"
 	}
 	return ""
 }
@@ -52,7 +48,7 @@ func (r *StatsRepo) GetRevenue(period string) ([]RevenuePoint, error) {
 	cond := r.periodCondition(period)
 	groupFmt := "YYYY-MM-DD"
 	if period == "quarter" || period == "all" {
-		groupFmt = "YYYY-IW"
+		groupFmt = "IYYY-IW"
 	}
 	rows, err := r.db.Query(fmt.Sprintf(
 		`SELECT TO_CHAR(created_at,'%s') dt, SUM(total_price)
@@ -109,7 +105,7 @@ func (r *StatsRepo) GetTopProducts(period string) ([]TopProduct, error) {
 		 JOIN products p ON p.id=oi.product_id
 		 WHERE o.status != 'cancelled' %s
 		 GROUP BY oi.product_id, p.name
-		 ORDER BY sold DESC FETCH FIRST 5 ROWS ONLY`, cond,
+		 ORDER BY sold DESC LIMIT 5`, cond,
 	))
 	if err != nil {
 		return nil, err
