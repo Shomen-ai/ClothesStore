@@ -100,7 +100,10 @@ func (h *AdminProductHandler) CreateProduct(c *gin.Context) {
 	}
 	for _, s := range req.Sizes {
 		s.ProductID = p.ID
-		h.repo.UpsertSize(&s)
+		if err := h.repo.UpsertSize(&s); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 	}
 	c.JSON(http.StatusCreated, p)
 }
@@ -133,7 +136,10 @@ func (h *AdminProductHandler) UpdateProduct(c *gin.Context) {
 	}
 	for _, s := range req.Sizes {
 		s.ProductID = id
-		h.repo.UpsertSize(&s)
+		if err := h.repo.UpsertSize(&s); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 	}
 	c.JSON(http.StatusOK, p)
 }
@@ -163,7 +169,10 @@ func (h *AdminProductHandler) UploadImage(c *gin.Context) {
 			return
 		}
 		img := &model.ProductImage{ProductID: productID, ImagePath: path, SortOrder: i}
-		h.repo.AddImage(img)
+		if err := h.repo.AddImage(img); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 		saved = append(saved, *img)
 	}
 	c.JSON(http.StatusCreated, saved)

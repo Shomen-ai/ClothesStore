@@ -44,6 +44,9 @@ func (h *WishlistHandler) Remove(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid product id"})
 		return
 	}
-	h.repo.Remove(userID, productID)
+	if err := h.repo.Remove(userID, productID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	c.Status(http.StatusNoContent)
 }

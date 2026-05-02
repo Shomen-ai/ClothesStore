@@ -12,8 +12,14 @@ func NewAdminStatsHandler(repo *repository.StatsRepo) *AdminStatsHandler {
 	return &AdminStatsHandler{repo: repo}
 }
 
+var validPeriods = map[string]bool{"day": true, "week": true, "month": true, "quarter": true, "all": true}
+
 func (h *AdminStatsHandler) Revenue(c *gin.Context) {
 	period := c.DefaultQuery("period", "month")
+	if !validPeriods[period] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid period"})
+		return
+	}
 	data, err := h.repo.GetRevenue(period)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -24,6 +30,10 @@ func (h *AdminStatsHandler) Revenue(c *gin.Context) {
 
 func (h *AdminStatsHandler) Orders(c *gin.Context) {
 	period := c.DefaultQuery("period", "month")
+	if !validPeriods[period] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid period"})
+		return
+	}
 	data, err := h.repo.GetOrderCounts(period)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -39,6 +49,10 @@ func (h *AdminStatsHandler) Orders(c *gin.Context) {
 
 func (h *AdminStatsHandler) Promos(c *gin.Context) {
 	period := c.DefaultQuery("period", "month")
+	if !validPeriods[period] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid period"})
+		return
+	}
 	data, err := h.repo.GetPromoStats(period)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

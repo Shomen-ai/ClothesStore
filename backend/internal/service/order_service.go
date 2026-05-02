@@ -57,21 +57,20 @@ func (s *OrderService) Create(userID int64, req CreateOrderRequest) (*model.Orde
 
 	if req.PromoCode != "" {
 		promo, err := s.promoRepo.GetByCode(req.PromoCode)
-		if err == nil {
-			if validateErr := ValidatePromo(promo); validateErr == nil {
-				discount := ApplyDiscount(promo, total)
-				order.DiscountAmount = discount
-				order.TotalPrice = total - discount
-				order.PromoCodeID = &promo.ID
-			}
+		if err != nil {
+			return nil, errors.New("promo code not found")
 		}
+		if err := ValidatePromo(promo); err != nil {
+			return nil, err
+		}
+		discount := ApplyDiscount(promo, total)
+		order.DiscountAmount = discount
+		order.TotalPrice = total - discount
+		order.PromoCodeID = &promo.ID
 	}
 
 	if err := s.orderRepo.Create(order, orderItems); err != nil {
 		return nil, err
-	}
-	if order.PromoCodeID != nil {
-		s.promoRepo.IncrementActivations(*order.PromoCodeID)
 	}
 	order.Items = orderItems
 	return order, nil

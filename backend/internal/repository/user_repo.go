@@ -73,7 +73,7 @@ func (r *UserRepo) GetAddresses(userID int64) ([]model.Address, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var addrs []model.Address
+	addrs := make([]model.Address, 0)
 	for rows.Next() {
 		var a model.Address
 		var def int

@@ -15,25 +15,37 @@ func (r *OrderRepo) Create(o *model.Order, items []model.OrderItem) error {
 	if err != nil {
 		return err
 	}
-	err = tx.QueryRow(
+	defer tx.Rollback()
+
+	if err = tx.QueryRow(
 		`INSERT INTO orders(user_id,address_id,promo_code_id,status,total_price,discount_amount)
 		 VALUES(:1,:2,:3,:4,:5,:6) RETURNING id INTO :7`,
 		o.UserID, o.AddressID, o.PromoCodeID, o.Status, o.TotalPrice, o.DiscountAmount, &o.ID,
-	).Err()
-	if err != nil {
-		tx.Rollback()
+	).Err(); err != nil {
 		return err
 	}
 	for i := range items {
 		items[i].OrderID = o.ID
-		err = tx.QueryRow(
+		if err = tx.QueryRow(
 			`INSERT INTO order_items(order_id,product_id,product_size_id,quantity,price_at_order)
 			 VALUES(:1,:2,:3,:4,:5) RETURNING id INTO :6`,
 			items[i].OrderID, items[i].ProductID, items[i].ProductSizeID,
 			items[i].Quantity, items[i].PriceAtOrder, &items[i].ID,
-		).Err()
-		if err != nil {
-			tx.Rollback()
+		).Err(); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(
+			`UPDATE product_sizes SET stock_qty = stock_qty - :1 WHERE id = :2`,
+			items[i].Quantity, items[i].ProductSizeID,
+		); err != nil {
+			return err
+		}
+	}
+	if o.PromoCodeID != nil {
+		if _, err = tx.Exec(
+			`UPDATE promo_codes SET activations_count = activations_count + 1 WHERE id = :1`,
+			*o.PromoCodeID,
+		); err != nil {
 			return err
 		}
 	}

@@ -45,7 +45,10 @@ func (h *UserHandler) UpdateProfile(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		h.repo.UpdatePassword(id, string(hash))
+		if err := h.repo.UpdatePassword(id, string(hash)); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
 	}
 	c.JSON(http.StatusOK, u)
 }
@@ -68,12 +71,12 @@ func (h *UserHandler) CreateAddress(c *gin.Context) {
 		return
 	}
 	a.UserID = id
-	if a.IsDefault {
-		h.repo.SetDefaultAddress(0, id)
-	}
 	if err := h.repo.CreateAddress(&a); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+	if a.IsDefault {
+		h.repo.SetDefaultAddress(a.ID, id)
 	}
 	c.JSON(http.StatusCreated, a)
 }

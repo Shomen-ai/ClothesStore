@@ -1,7 +1,8 @@
 package handler
 
 import (
-	"math/rand"
+	"crypto/rand"
+	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
@@ -63,8 +64,9 @@ func (h *AdminPromoHandler) Delete(c *gin.Context) {
 func randomCode(n int) string {
 	const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	b := strings.Builder{}
-	for i := 0; i < n; i++ {
-		b.WriteByte(chars[rand.Intn(len(chars))])
+	for range n {
+		idx, _ := rand.Int(rand.Reader, big.NewInt(int64(len(chars))))
+		b.WriteByte(chars[idx.Int64()])
 	}
 	return b.String()
 }
