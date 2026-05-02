@@ -19,23 +19,23 @@ func (r *OrderRepo) Create(o *model.Order, items []model.OrderItem) error {
 
 	if err = tx.QueryRow(
 		`INSERT INTO orders(user_id,address_id,promo_code_id,status,total_price,discount_amount)
-		 VALUES(:1,:2,:3,:4,:5,:6) RETURNING id INTO :7`,
-		o.UserID, o.AddressID, o.PromoCodeID, o.Status, o.TotalPrice, o.DiscountAmount, &o.ID,
-	).Err(); err != nil {
+		 VALUES($1,$2,$3,$4,$5,$6) RETURNING id`,
+		o.UserID, o.AddressID, o.PromoCodeID, o.Status, o.TotalPrice, o.DiscountAmount,
+	).Scan(&o.ID); err != nil {
 		return err
 	}
 	for i := range items {
 		items[i].OrderID = o.ID
 		if err = tx.QueryRow(
 			`INSERT INTO order_items(order_id,product_id,product_size_id,quantity,price_at_order)
-			 VALUES(:1,:2,:3,:4,:5) RETURNING id INTO :6`,
+			 VALUES($1,$2,$3,$4,$5) RETURNING id`,
 			items[i].OrderID, items[i].ProductID, items[i].ProductSizeID,
-			items[i].Quantity, items[i].PriceAtOrder, &items[i].ID,
-		).Err(); err != nil {
+			items[i].Quantity, items[i].PriceAtOrder,
+		).Scan(&items[i].ID); err != nil {
 			return err
 		}
 		if _, err = tx.Exec(
-			`UPDATE product_sizes SET stock_qty = stock_qty - :1 WHERE id = :2`,
+			`UPDATE product_sizes SET stock_qty = stock_qty - $1 WHERE id = $2`,
 			items[i].Quantity, items[i].ProductSizeID,
 		); err != nil {
 			return err
@@ -43,7 +43,7 @@ func (r *OrderRepo) Create(o *model.Order, items []model.OrderItem) error {
 	}
 	if o.PromoCodeID != nil {
 		if _, err = tx.Exec(
-			`UPDATE promo_codes SET activations_count = activations_count + 1 WHERE id = :1`,
+			`UPDATE promo_codes SET activations_count = activations_count + 1 WHERE id = $1`,
 			*o.PromoCodeID,
 		); err != nil {
 			return err
@@ -55,7 +55,7 @@ func (r *OrderRepo) Create(o *model.Order, items []model.OrderItem) error {
 func (r *OrderRepo) GetByUser(userID int64) ([]model.Order, error) {
 	rows, err := r.db.Query(
 		`SELECT id,user_id,address_id,promo_code_id,status,total_price,discount_amount,created_at
-		 FROM orders WHERE user_id=:1 ORDER BY created_at DESC`, userID,
+		 FROM orders WHERE user_id=$1 ORDER BY created_at DESC`, userID,
 	)
 	if err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func (r *OrderRepo) GetByID(id int64) (*model.Order, error) {
 	var promoID sql.NullInt64
 	err := r.db.QueryRow(
 		`SELECT id,user_id,address_id,promo_code_id,status,total_price,discount_amount,created_at
-		 FROM orders WHERE id=:1`, id,
+		 FROM orders WHERE id=$1`, id,
 	).Scan(&o.ID, &o.UserID, &o.AddressID, &promoID, &o.Status, &o.TotalPrice, &o.DiscountAmount, &o.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -79,7 +79,7 @@ func (r *OrderRepo) GetByID(id int64) (*model.Order, error) {
 	}
 	rows, err := r.db.Query(
 		`SELECT id,order_id,product_id,product_size_id,quantity,price_at_order
-		 FROM order_items WHERE order_id=:1`, id,
+		 FROM order_items WHERE order_id=$1`, id,
 	)
 	if err != nil {
 		return nil, err
@@ -106,17 +106,17 @@ func (r *OrderRepo) GetAll(status, dateFrom, dateTo string) ([]model.Order, erro
 	args := []any{}
 	i := 1
 	if status != "" {
-		query += fmt.Sprintf(" AND status=:%d", i)
+		query += fmt.Sprintf(" AND status=$%d", i)
 		args = append(args, status)
 		i++
 	}
 	if dateFrom != "" {
-		query += fmt.Sprintf(" AND created_at >= TO_TIMESTAMP(:%d,'YYYY-MM-DD')", i)
+		query += fmt.Sprintf(" AND created_at >= $%d::date", i)
 		args = append(args, dateFrom)
 		i++
 	}
 	if dateTo != "" {
-		query += fmt.Sprintf(" AND created_at <= TO_TIMESTAMP(:%d,'YYYY-MM-DD')+1", i)
+		query += fmt.Sprintf(" AND created_at < ($%d::date + INTERVAL '1 day')", i)
 		args = append(args, dateTo)
 	}
 	query += " ORDER BY created_at DESC"
@@ -129,7 +129,7 @@ func (r *OrderRepo) GetAll(status, dateFrom, dateTo string) ([]model.Order, erro
 }
 
 func (r *OrderRepo) UpdateStatus(id int64, status string) error {
-	_, err := r.db.Exec(`UPDATE orders SET status=:1 WHERE id=:2`, status, id)
+	_, err := r.db.Exec(`UPDATE orders SET status=$1 WHERE id=$2`, status, id)
 	return err
 }
 
