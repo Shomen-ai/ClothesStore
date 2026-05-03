@@ -114,3 +114,8 @@ CREATE INDEX idx_order_items_product_id ON order_items(product_id);
 CREATE INDEX idx_order_items_product_size_id ON order_items(product_size_id);
 CREATE INDEX idx_wishlist_user_id ON wishlist(user_id);
 CREATE INDEX idx_wishlist_product_id ON wishlist(product_id);
+
+-- Seed admin user (password: admin123)
+INSERT INTO users(email, password_hash, name, role)
+VALUES ('admin@clothesstore.ru', '$2a$10$IJWc7rzwwLb/an/.qPDxleZYkdmKgNv0deLl/RS4.TdzAsflk3C1i', 'Admin', 'admin')
+ON CONFLICT (email) DO NOTHING;

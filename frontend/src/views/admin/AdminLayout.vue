@@ -22,4 +22,14 @@
 .admin-sidebar nav a { display: block; padding: 12px 0; color: var(--color-text-muted); font-size: 14px; border-bottom: 1px solid var(--color-border); }
 .admin-sidebar nav a:hover, .admin-sidebar nav a.router-link-exact-active { color: var(--color-text); }
 .admin-content { flex: 1; padding: 40px; overflow-y: auto; }
+
+@media (max-width: 768px) {
+  .admin-page { flex-direction: column; }
+  .admin-sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--color-border); padding: 12px 16px; }
+  .sidebar-title { display: inline; margin-bottom: 0; margin-right: 16px; }
+  .admin-sidebar nav { display: flex; overflow-x: auto; gap: 0; }
+  .admin-sidebar nav a { display: inline-block; padding: 8px 14px; border-bottom: none; border-right: 1px solid var(--color-border); white-space: nowrap; font-size: 13px; }
+  .admin-sidebar nav a:last-child { border-right: none; }
+  .admin-content { padding: 16px; }
+}
 </style>

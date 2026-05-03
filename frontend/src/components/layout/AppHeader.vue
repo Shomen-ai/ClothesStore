@@ -58,6 +58,12 @@ function handleLogout() {
   max-width: 1400px; margin: 0 auto; padding: 0 24px;
   height: 64px; display: flex; align-items: center; gap: 32px;
 }
+@media (max-width: 768px) {
+  .header-inner { padding: 0 16px; gap: 16px; }
+  .nav-links { gap: 12px; }
+  .nav-links a { font-size: 12px; }
+  .header-actions { gap: 10px; }
+}
 .logo {
   font-size: 20px; font-weight: 800; letter-spacing: 4px;
   color: var(--color-text); text-decoration: none;
@@ -67,14 +73,14 @@ function handleLogout() {
 .nav-links a { color: var(--color-text-muted); font-size: 13px; letter-spacing: 1px; text-transform: uppercase; }
 .nav-links a:hover, .nav-links a.router-link-active { color: var(--color-text); }
 .header-actions { display: flex; align-items: center; gap: 16px; }
-.cart-btn { position: relative; color: var(--color-text); display: flex; }
+.cart-btn { position: relative; color: var(--color-text); display: flex; font-size: 26px; }
 .cart-badge {
   position: absolute; top: -6px; right: -6px;
   background: var(--color-red); color: white;
   border-radius: 50%; width: 16px; height: 16px;
   font-size: 10px; display: flex; align-items: center; justify-content: center;
 }
-.icon-btn { background: none; border: none; cursor: pointer; color: var(--color-text-muted); display: flex; }
+.icon-btn { background: none; border: none; cursor: pointer; color: var(--color-text-muted); display: flex; font-size: 26px; }
 .icon-btn:hover { color: var(--color-text); }
 .admin-link { color: var(--color-red); }
 .nav-link { color: var(--color-text-muted); font-size: 13px; }

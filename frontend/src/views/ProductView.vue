@@ -83,6 +83,15 @@ function formatPrice(p) {
 <style scoped>
 .product-page { max-width: 1200px; margin: 40px auto; padding: 0 24px; }
 .product-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; }
+
+@media (max-width: 768px) {
+  .product-page { margin: 16px auto; padding: 0 16px; }
+  .product-layout { grid-template-columns: 1fr; gap: 24px; }
+  .product-name { font-size: 20px; }
+  .product-price { font-size: 20px; margin-bottom: 16px; }
+  .product-desc { margin-bottom: 20px; }
+  .sizes { margin-bottom: 20px; }
+}
 .main-image { aspect-ratio: 3/4; background: var(--color-bg-surface); border: 1px solid var(--color-border); overflow: hidden; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; }
 .main-image img { width: 100%; height: 100%; object-fit: cover; }
 .no-image { color: var(--color-text-muted); font-size: 12px; letter-spacing: 2px; }

@@ -125,6 +125,13 @@ function formatPrice(p) {
 .empty-cart p { margin-bottom: 24px; font-size: 18px; }
 .cart-layout { display: grid; grid-template-columns: 1fr 360px; gap: 48px; align-items: start; }
 .cart-summary { background: var(--color-bg-surface); border: 1px solid var(--color-border); padding: 32px; position: sticky; top: 80px; }
+
+@media (max-width: 768px) {
+  .cart-page { margin: 16px auto; padding: 0 16px; }
+  .page-title { font-size: 20px; margin-bottom: 24px; }
+  .cart-layout { grid-template-columns: 1fr; gap: 24px; }
+  .cart-summary { position: static; padding: 20px; }
+}
 .summary-title { font-size: 16px; font-weight: 700; letter-spacing: 2px; margin-bottom: 24px; }
 .summary-row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 14px; }
 .summary-row.discount { color: var(--color-red); }

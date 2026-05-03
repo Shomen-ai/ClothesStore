@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
 
 const routes = [
-  { path: '/', component: () => import('@/views/HomeView.vue') },
+  { path: '/', redirect: '/catalogue' },
   { path: '/catalogue', component: () => import('@/views/CatalogueView.vue') },
   { path: '/catalogue/:id', component: () => import('@/views/ProductView.vue') },
   { path: '/cart', component: () => import('@/views/CartView.vue') },

@@ -20,7 +20,7 @@ func (r *UserRepo) Create(u *model.User) error {
 func (r *UserRepo) GetByEmail(email string) (*model.User, error) {
 	u := &model.User{}
 	err := r.db.QueryRow(
-		`SELECT id,email,password_hash,name,phone,role,created_at FROM users WHERE email=$1`,
+		`SELECT id,email,password_hash,name,COALESCE(phone,''),role,created_at FROM users WHERE email=$1`,
 		email,
 	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Name, &u.Phone, &u.Role, &u.CreatedAt)
 	if err != nil {
@@ -32,7 +32,7 @@ func (r *UserRepo) GetByEmail(email string) (*model.User, error) {
 func (r *UserRepo) GetByID(id int64) (*model.User, error) {
 	u := &model.User{}
 	err := r.db.QueryRow(
-		`SELECT id,email,name,phone,role,created_at FROM users WHERE id=$1`, id,
+		`SELECT id,email,name,COALESCE(phone,''),role,created_at FROM users WHERE id=$1`, id,
 	).Scan(&u.ID, &u.Email, &u.Name, &u.Phone, &u.Role, &u.CreatedAt)
 	if err != nil {
 		return nil, err

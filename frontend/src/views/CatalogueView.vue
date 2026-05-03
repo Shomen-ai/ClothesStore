@@ -1,7 +1,10 @@
 <template>
   <div class="catalogue-page">
     <div class="catalogue-layout">
-      <aside class="sidebar">
+      <button class="filters-toggle" @click="filtersOpen = !filtersOpen">
+        {{ filtersOpen ? 'Скрыть фильтры ▲' : 'Фильтры ▼' }}
+      </button>
+      <aside class="sidebar" :class="{ open: filtersOpen }">
         <ProductFilters
           :categories="categories"
           :model-category="filters.category"
@@ -39,6 +42,7 @@ const products = ref([])
 const categories = ref([])
 const loading = ref(false)
 const filters = ref({ category: null, size: '', sort: '', q: '' })
+const filtersOpen = ref(false)
 const wishlist = useWishlistStore()
 
 let debounceTimer = null
@@ -74,4 +78,18 @@ onMounted(async () => {
 .search-row { margin-bottom: 24px; }
 .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 24px; }
 .loading-state, .empty-state { color: var(--color-text-muted); padding: 80px 0; text-align: center; }
+.filters-toggle { display: none; }
+
+@media (max-width: 768px) {
+  .catalogue-page { padding: 16px; }
+  .catalogue-layout { grid-template-columns: 1fr; gap: 0; }
+  .filters-toggle {
+    display: block; width: 100%; padding: 10px; margin-bottom: 12px;
+    background: var(--color-bg-surface); border: 1px solid var(--color-border);
+    color: var(--color-text-muted); font-size: 13px; letter-spacing: 1px; cursor: pointer;
+  }
+  .sidebar { display: none; border-right: none; padding-right: 0; padding-bottom: 16px; border-bottom: 1px solid var(--color-border); margin-bottom: 16px; }
+  .sidebar.open { display: block; }
+  .product-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+}
 </style>
