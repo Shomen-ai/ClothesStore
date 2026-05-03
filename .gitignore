@@ -1,5 +1,9 @@
 .worktrees/
+.claude/
+.superpowers/
+docs/
 backend/.env
 backend/uploads/
 frontend/node_modules/
 frontend/dist/
+.env
