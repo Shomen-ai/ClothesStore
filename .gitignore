@@ -1,6 +1,4 @@
 .worktrees/
-.claude/
-.superpowers/
 docs/
 backend/.env
 backend/uploads/
