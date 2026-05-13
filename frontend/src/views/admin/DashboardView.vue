@@ -1,50 +1,97 @@
 <template>
-  <div>
-    <div class="dash-header">
-      <h2 class="page-title">ДАШБОРД</h2>
-      <el-radio-group v-model="period" @change="loadAll">
-        <el-radio-button value="day">День</el-radio-button>
-        <el-radio-button value="week">Неделя</el-radio-button>
-        <el-radio-button value="month">Месяц</el-radio-button>
-        <el-radio-button value="quarter">Квартал</el-radio-button>
-        <el-radio-button value="all">Всё время</el-radio-button>
-      </el-radio-group>
+  <div class="dashboard">
+    <header class="view-head">
+      <div class="head-marquee-wrap" aria-hidden="true">
+        <div class="head-marquee">
+          <div class="marquee-row row-1">
+            <div class="marquee-track">
+              <span>METRICS · REVENUE · ORDERS · DROP · SIGNAL · LOUD · STATS ·&nbsp;</span>
+              <span>METRICS · REVENUE · ORDERS · DROP · SIGNAL · LOUD · STATS ·&nbsp;</span>
+            </div>
+          </div>
+          <div class="marquee-row row-2">
+            <div class="marquee-track">
+              <span>цифры — выручка — кассы — pulse — данные — pattern —&nbsp;</span>
+              <span>цифры — выручка — кассы — pulse — данные — pattern —&nbsp;</span>
+            </div>
+          </div>
+          <div class="marquee-row row-3">
+            <div class="marquee-track">
+              <span>TRACK · YIELD · RUN · GROW · CONVERT · RHYTHM · INTAKE ·&nbsp;</span>
+              <span>TRACK · YIELD · RUN · GROW · CONVERT · RHYTHM · INTAKE ·&nbsp;</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="head-text">
+        <p class="eyebrow">Админка / Дашборд</p>
+        <h1 class="head-title">Цифры <span class="gothic-accent">громко</span></h1>
+      </div>
+    </header>
+
+    <div class="period-bar">
+      <span class="period-label">Период</span>
+      <div class="period-switch">
+        <button v-for="opt in periodOptions" :key="opt.value"
+          class="period-btn" :class="{ active: period === opt.value }"
+          @click="period = opt.value; loadAll()">
+          {{ opt.label }}
+        </button>
+      </div>
     </div>
 
     <div class="stats-grid">
-      <el-card class="stat-card wide">
-        <div class="card-title">ВЫРУЧКА</div>
+      <article class="stat-card wide">
+        <div class="card-head">
+          <span class="card-eyebrow">Выручка</span>
+          <span class="card-period">/ {{ currentPeriodLabel }}</span>
+        </div>
         <div class="big-number">{{ formatPrice(totalRevenue) }}</div>
-        <StatsChart :points="revenuePoints" />
-      </el-card>
+        <StatsChart :points="revenuePoints" :key="period" />
+      </article>
 
-      <el-card class="stat-card">
-        <div class="card-title">ЗАКАЗЫ ПО СТАТУСАМ</div>
-        <div v-for="s in orderStats" :key="s.status" class="status-row">
-          <span class="status-label">{{ statusLabel(s.status) }}</span>
-          <span class="status-count">{{ s.count }}</span>
+      <article class="stat-card">
+        <div class="card-head">
+          <span class="card-eyebrow">Заказы по статусам</span>
         </div>
-        <div v-if="!orderStats.length" class="empty-stat">Нет данных</div>
-      </el-card>
+        <ul class="rows">
+          <li v-for="s in orderStats" :key="s.status" class="row-line">
+            <span class="row-label">
+              <span class="row-dot" :class="`dot-${s.status}`"></span>
+              {{ statusLabel(s.status) }}
+            </span>
+            <span class="row-value">{{ s.count }}</span>
+          </li>
+          <li v-if="!orderStats.length" class="row-empty">пока пусто</li>
+        </ul>
+      </article>
 
-      <el-card class="stat-card">
-        <div class="card-title">ТОП ТОВАРОВ</div>
-        <div v-for="(p, i) in topProducts" :key="p.product_id" class="top-row">
-          <span class="top-rank">{{ i + 1 }}</span>
-          <span class="top-name">{{ p.name }}</span>
-          <span class="top-sold">{{ p.sold }} шт.</span>
+      <article class="stat-card">
+        <div class="card-head">
+          <span class="card-eyebrow">Топ товаров</span>
         </div>
-        <div v-if="!topProducts.length" class="empty-stat">Нет данных</div>
-      </el-card>
+        <ul class="rows">
+          <li v-for="(p, i) in topProducts" :key="p.product_id" class="row-line">
+            <span class="row-rank">{{ String(i + 1).padStart(2, '0') }}</span>
+            <span class="row-name">{{ p.name }}</span>
+            <span class="row-value">{{ p.sold }}<span class="row-unit"> шт</span></span>
+          </li>
+          <li v-if="!topProducts.length" class="row-empty">пока пусто</li>
+        </ul>
+      </article>
 
-      <el-card class="stat-card">
-        <div class="card-title">АКТИВАЦИИ ПРОМОКОДОВ</div>
-        <div v-for="p in promoStats" :key="p.code" class="promo-stat-row">
-          <span class="promo-code">{{ p.code }}</span>
-          <span class="promo-count">{{ p.activations }}</span>
+      <article class="stat-card">
+        <div class="card-head">
+          <span class="card-eyebrow">Промокоды</span>
         </div>
-        <div v-if="!promoStats.length" class="empty-stat">Нет данных</div>
-      </el-card>
+        <ul class="rows">
+          <li v-for="p in promoStats" :key="p.code" class="row-line">
+            <span class="row-code">{{ p.code }}</span>
+            <span class="row-value">{{ p.activations }}<span class="row-unit"> акт.</span></span>
+          </li>
+          <li v-if="!promoStats.length" class="row-empty">пока пусто</li>
+        </ul>
+      </article>
     </div>
   </div>
 </template>
@@ -59,6 +106,15 @@ const revenuePoints = ref([])
 const orderStats = ref([])
 const topProducts = ref([])
 const promoStats = ref([])
+
+const periodOptions = [
+  { value: 'day',     label: 'День' },
+  { value: 'week',    label: 'Неделя' },
+  { value: 'month',   label: 'Месяц' },
+  { value: 'quarter', label: 'Квартал' },
+  { value: 'all',     label: 'Всё время' },
+]
+const currentPeriodLabel = computed(() => periodOptions.find(o => o.value === period.value)?.label || '')
 
 const totalRevenue = computed(() => revenuePoints.value.reduce((s, p) => s + p.revenue, 0))
 
@@ -85,15 +141,164 @@ function formatPrice(p) {
 </script>
 
 <style scoped>
-.dash-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; flex-wrap: wrap; gap: 16px; }
-.page-title { font-size: 20px; font-weight: 800; letter-spacing: 3px; }
-.stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.dashboard { min-width: 0; }
+
+.view-head {
+  position: relative;
+  margin-bottom: 28px;
+  padding: 0 0 28px;
+  min-height: 180px;
+  border-bottom: 1px solid var(--border);
+  overflow: visible;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 16px;
+}
+.head-text { position: relative; z-index: 2; }
+.head-title {
+  font-size: clamp(36px, 5vw, 56px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--text);
+  margin-top: 12px;
+}
+.head-title .gothic-accent { font-size: 1.05em; }
+
+.period-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.period-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.period-switch {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-surface);
+}
+.period-btn {
+  background: transparent;
+  border: 0;
+  color: var(--text-muted);
+  font: 500 11px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 10px 14px;
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+  transition: color .15s ease, background .15s ease;
+}
+.period-btn:last-child { border-right: 0; }
+.period-btn:hover { color: var(--text); }
+.period-btn.active {
+  color: var(--text);
+  background: var(--accent-haze);
+  box-shadow: inset 0 -2px 0 0 var(--accent);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+.stat-card {
+  position: relative;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  padding: 24px 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: border-color .2s ease, transform .2s ease;
+}
+.stat-card:hover { border-color: var(--border-strong); }
 .stat-card.wide { grid-column: 1 / -1; }
-.card-title { font-size: 11px; letter-spacing: 2px; color: var(--color-text-muted); margin-bottom: 16px; }
-.big-number { font-size: 36px; font-weight: 800; margin-bottom: 24px; }
-.status-row, .top-row, .promo-stat-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--color-border); font-size: 14px; }
-.top-rank { color: var(--color-red); font-weight: 700; width: 24px; }
-.top-name { flex: 1; }
-.promo-code { font-family: monospace; color: var(--color-red); }
-.empty-stat { color: var(--color-text-muted); font-size: 13px; }
+
+.card-head { display: flex; align-items: baseline; justify-content: space-between; }
+.card-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.card-period {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+}
+
+.big-number {
+  font-size: clamp(36px, 4.5vw, 54px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.rows { list-style: none; display: flex; flex-direction: column; }
+.row-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--border);
+  font-size: 14px;
+  color: var(--text-soft);
+}
+.row-line:last-child { border-bottom: 0; }
+.row-label { display: inline-flex; align-items: center; gap: 10px; flex: 1; }
+.row-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-dim); flex-shrink: 0; }
+.row-dot.dot-pending   { background: #eab308; }
+.row-dot.dot-confirmed { background: #3b82f6; }
+.row-dot.dot-shipped   { background: #8b5cf6; }
+.row-dot.dot-delivered { background: #22c55e; box-shadow: 0 0 8px rgba(34,197,94,0.5); }
+.row-dot.dot-cancelled { background: #ef4848; }
+
+.row-rank {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+  width: 22px;
+}
+.row-name { flex: 1; color: var(--text); }
+.row-code {
+  flex: 1;
+  font-family: var(--font-mono);
+  color: var(--accent-soft);
+  letter-spacing: 0.08em;
+  font-size: 13px;
+}
+.row-value {
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.row-unit { color: var(--text-dim); font-weight: 400; font-size: 11px; margin-left: 2px; }
+.row-empty {
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--text-dim);
+  padding: 12px 0;
+}
+
+@media (max-width: 1100px) {
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 720px) {
+  .stats-grid { grid-template-columns: 1fr; }
+  .view-head { min-height: 140px; }
+  .head-title { font-size: 36px; }
+  .period-btn { padding: 8px 10px; font-size: 10px; }
+}
 </style>

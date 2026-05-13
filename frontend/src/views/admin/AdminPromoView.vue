@@ -1,9 +1,16 @@
 <template>
   <div>
-    <div class="view-header">
-      <h2 class="page-title">ПРОМОКОДЫ</h2>
-      <el-button type="primary" @click="dialogOpen = true; resetForm()">+ Создать</el-button>
-    </div>
+    <header class="admin-view-head">
+      <div>
+        <p class="eyebrow">Админка / Скидки</p>
+        <h1 class="head-title">Промокоды <span class="gothic-accent">drop</span></h1>
+      </div>
+      <button class="cta-add" @click="dialogOpen = true; resetForm()">
+        <span class="cta-mark">+</span>
+        <span class="cta-label">Новый код</span>
+        <span class="cta-arrow">→</span>
+      </button>
+    </header>
 
     <el-table :data="promos">
       <el-table-column prop="code" label="Код" width="140">
@@ -29,10 +36,12 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="Действия" width="180">
+      <el-table-column label="Действия" width="140">
         <template #default="{ row }">
-          <el-button v-if="row.is_active" size="small" @click="deactivate(row)">Деакт.</el-button>
-          <el-button size="small" type="danger" @click="remove(row.id)">Удалить</el-button>
+          <div class="row-actions">
+            <el-button v-if="row.is_active" size="small" @click="deactivate(row)">Деактивировать</el-button>
+            <el-button size="small" type="danger" @click="remove(row.id)">Удалить</el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -98,6 +107,26 @@ function formatPrice(p) { return new Intl.NumberFormat('ru-RU',{style:'currency'
 </script>
 
 <style scoped>
-.view-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-.page-title { font-size: 20px; font-weight: 800; letter-spacing: 3px; }
+.admin-view-head {
+  display: flex; justify-content: space-between; align-items: flex-end; gap: 24px;
+  padding-bottom: 24px;
+  margin-bottom: 32px;
+  border-bottom: 1px solid var(--border);
+}
+.head-title {
+  font-size: clamp(32px, 4vw, 48px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  margin-top: 12px;
+}
+.head-title .gothic-accent { font-size: 1.05em; }
+.row-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+.row-actions :deep(.el-button + .el-button) { margin-left: 0; }
+.row-actions :deep(.el-button) { width: 100%; }
 </style>

@@ -33,27 +33,27 @@ type PromoStat struct {
 func (r *StatsRepo) periodCondition(period string) string {
 	switch period {
 	case "day":
-		return "AND created_at >= CURRENT_DATE"
+		return "AND o.created_at >= CURRENT_DATE"
 	case "week":
-		return "AND created_at >= CURRENT_DATE - INTERVAL '7 days'"
+		return "AND o.created_at >= CURRENT_DATE - INTERVAL '7 days'"
 	case "month":
-		return "AND created_at >= date_trunc('month', CURRENT_DATE)"
+		return "AND o.created_at >= date_trunc('month', CURRENT_DATE)"
 	case "quarter":
-		return "AND created_at >= date_trunc('quarter', CURRENT_DATE)"
+		return "AND o.created_at >= date_trunc('quarter', CURRENT_DATE)"
 	}
 	return ""
 }
 
 func (r *StatsRepo) GetRevenue(period string) ([]RevenuePoint, error) {
 	cond := r.periodCondition(period)
-	groupFmt := "YYYY-MM-DD"
+	groupExpr := "o.created_at::date"
 	if period == "quarter" || period == "all" {
-		groupFmt = "IYYY-IW"
+		groupExpr = "date_trunc('week', o.created_at)::date"
 	}
 	rows, err := r.db.Query(fmt.Sprintf(
-		`SELECT TO_CHAR(created_at,'%s') dt, SUM(total_price)
-		 FROM orders WHERE status != 'cancelled' %s
-		 GROUP BY TO_CHAR(created_at,'%s') ORDER BY dt`, groupFmt, cond, groupFmt,
+		`SELECT TO_CHAR(%s, 'DD.MM.YYYY') AS dt, SUM(o.total_price)
+		 FROM orders o WHERE o.status != 'cancelled' %s
+		 GROUP BY %s ORDER BY %s`, groupExpr, cond, groupExpr, groupExpr,
 	))
 	if err != nil {
 		return nil, err
@@ -76,7 +76,7 @@ func (r *StatsRepo) GetRevenue(period string) ([]RevenuePoint, error) {
 func (r *StatsRepo) GetOrderCounts(period string) ([]OrderStatusCount, error) {
 	cond := r.periodCondition(period)
 	rows, err := r.db.Query(fmt.Sprintf(
-		`SELECT status, COUNT(*) FROM orders WHERE 1=1 %s GROUP BY status`, cond,
+		`SELECT o.status, COUNT(*) FROM orders o WHERE 1=1 %s GROUP BY o.status`, cond,
 	))
 	if err != nil {
 		return nil, err

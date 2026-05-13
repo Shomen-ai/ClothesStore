@@ -9,6 +9,7 @@
     </el-form-item>
     <el-form-item label="Цена (₽)"><el-input-number v-model="form.price" :min="0" /></el-form-item>
     <el-form-item label="Активен"><el-switch v-model="form.is_active" /></el-form-item>
+    <el-form-item label="Распродажа (SALE)"><el-switch v-model="form.is_on_sale" /></el-form-item>
 
     <el-form-item label="Размеры и остатки">
       <div v-for="s in allSizes" :key="s" class="size-row">

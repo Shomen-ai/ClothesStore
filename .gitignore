@@ -3,3 +3,16 @@ backend/uploads/
 frontend/node_modules/
 frontend/dist/
 .env
+diploma/
+
+# OS / IDE junk
+.DS_Store
+.idea/
+.vscode/
+
+# scraper artifacts (large / regenerable)
+scripts/_images/
+scripts/__pycache__/
+scripts/venv/
+scripts/*.log
+

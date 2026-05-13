@@ -26,11 +26,16 @@ func (h *CatalogueHandler) GetCategories(c *gin.Context) {
 func (h *CatalogueHandler) ListProducts(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	catID, _ := strconv.ParseInt(c.Query("category"), 10, 64)
+	priceMin, _ := strconv.ParseFloat(c.Query("price_min"), 64)
+	priceMax, _ := strconv.ParseFloat(c.Query("price_max"), 64)
 	f := repository.ProductFilter{
 		CategoryID: catID,
 		Size:       c.Query("size"),
 		Search:     c.Query("q"),
 		Sort:       c.Query("sort"),
+		PriceMin:   priceMin,
+		PriceMax:   priceMax,
+		Sale:       c.Query("sale") == "1" || c.Query("sale") == "true",
 		Page:       page,
 		PageSize:   24,
 	}

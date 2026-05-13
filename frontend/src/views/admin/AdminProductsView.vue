@@ -1,9 +1,16 @@
 <template>
   <div>
-    <div class="view-header">
-      <h2 class="page-title">ТОВАРЫ</h2>
-      <el-button type="primary" @click="openCreate">+ Добавить товар</el-button>
-    </div>
+    <header class="admin-view-head">
+      <div>
+        <p class="eyebrow">Админка / Каталог</p>
+        <h1 class="head-title">Товары <span class="gothic-accent">витрина</span></h1>
+      </div>
+      <button class="cta-add" @click="openCreate">
+        <span class="cta-mark">+</span>
+        <span class="cta-label">Новый товар</span>
+        <span class="cta-arrow">→</span>
+      </button>
+    </header>
 
     <el-table :data="products" style="width:100%">
       <el-table-column width="80">
@@ -21,10 +28,17 @@
           <el-switch :model-value="row.is_active" @change="toggleActive(row)" />
         </template>
       </el-table-column>
-      <el-table-column label="Действия" width="180">
+      <el-table-column label="Sale" width="80">
         <template #default="{ row }">
-          <el-button size="small" @click="openEdit(row)">Изменить</el-button>
-          <el-button size="small" type="danger" @click="remove(row.id)">Удалить</el-button>
+          <el-tag v-if="row.is_on_sale" type="danger" size="small">SALE</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="Действия" width="140">
+        <template #default="{ row }">
+          <div class="row-actions">
+            <el-button size="small" @click="openEdit(row)">Изменить</el-button>
+            <el-button size="small" type="danger" @click="remove(row.id)">Удалить</el-button>
+          </div>
         </template>
       </el-table-column>
     </el-table>
@@ -53,7 +67,7 @@ const editingId = ref(null)
 const editingImages = ref([])
 const saving = ref(false)
 const pendingFiles = ref([])
-const emptyForm = () => ({ name:'', description:'', category_id:null, price:0, is_active:true, sizes:[] })
+const emptyForm = () => ({ name:'', description:'', category_id:null, price:0, is_active:true, is_on_sale:false, sizes:[] })
 const formData = ref(emptyForm())
 
 onMounted(async () => {
@@ -114,6 +128,26 @@ function formatPrice(p) {
 </script>
 
 <style scoped>
-.view-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-.page-title { font-size: 20px; font-weight: 800; letter-spacing: 3px; }
+.admin-view-head {
+  display: flex; justify-content: space-between; align-items: flex-end; gap: 24px;
+  padding-bottom: 24px;
+  margin-bottom: 32px;
+  border-bottom: 1px solid var(--border);
+}
+.head-title {
+  font-size: clamp(32px, 4vw, 48px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  margin-top: 12px;
+}
+.head-title .gothic-accent { font-size: 1.05em; }
+.row-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+.row-actions :deep(.el-button + .el-button) { margin-left: 0; }
+.row-actions :deep(.el-button) { width: 100%; }
 </style>

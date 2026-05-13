@@ -54,6 +54,9 @@ type ProductFilter struct {
 	Size       string
 	Search     string
 	Sort       string
+	PriceMin   float64
+	PriceMax   float64
+	Sale       bool
 	Page       int
 	PageSize   int
 }
@@ -87,8 +90,21 @@ func (r *ProductRepo) List(f ProductFilter) ([]model.Product, error) {
 		args = append(args, f.Size)
 		i++
 	}
+	if f.PriceMin > 0 {
+		where = append(where, fmt.Sprintf("p.price >= $%d", i))
+		args = append(args, f.PriceMin)
+		i++
+	}
+	if f.PriceMax > 0 {
+		where = append(where, fmt.Sprintf("p.price <= $%d", i))
+		args = append(args, f.PriceMax)
+		i++
+	}
+	if f.Sale {
+		where = append(where, "p.is_on_sale = true")
+	}
 
-	orderBy := "p.created_at DESC"
+	orderBy := "c.sort_order ASC, p.created_at DESC"
 	switch f.Sort {
 	case "price_asc":
 		orderBy = "p.price ASC"
@@ -97,8 +113,10 @@ func (r *ProductRepo) List(f ProductFilter) ([]model.Product, error) {
 	}
 
 	query := fmt.Sprintf(
-		`SELECT p.id,p.category_id,p.name,p.description,p.price,p.is_active,p.created_at
-		 FROM products p WHERE %s ORDER BY %s
+		`SELECT p.id,p.category_id,p.name,p.description,p.price,p.is_active,p.is_on_sale,p.created_at
+		 FROM products p
+		 LEFT JOIN categories c ON c.id = p.category_id
+		 WHERE %s ORDER BY %s
 		 LIMIT $%d OFFSET $%d`,
 		strings.Join(where, " AND "), orderBy, i, i+1,
 	)
@@ -114,7 +132,7 @@ func (r *ProductRepo) List(f ProductFilter) ([]model.Product, error) {
 	for rows.Next() {
 		var p model.Product
 		if err := rows.Scan(&p.ID, &p.CategoryID, &p.Name, &p.Description,
-			&p.Price, &p.IsActive, &p.CreatedAt); err != nil {
+			&p.Price, &p.IsActive, &p.IsOnSale, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		products = append(products, p)
@@ -122,14 +140,59 @@ func (r *ProductRepo) List(f ProductFilter) ([]model.Product, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	if err := r.attachImages(products); err != nil {
+		return nil, err
+	}
 	return products, nil
+}
+
+// attachImages fills the Images slice on each product in a single batched query.
+func (r *ProductRepo) attachImages(products []model.Product) error {
+	if len(products) == 0 {
+		return nil
+	}
+	ids := make([]int64, len(products))
+	idx := make(map[int64]int, len(products))
+	for i, p := range products {
+		ids[i] = p.ID
+		idx[p.ID] = i
+	}
+	q, args := buildInQuery(
+		`SELECT id,product_id,image_path,is_primary,sort_order FROM product_images WHERE product_id IN (%s) ORDER BY product_id, sort_order`,
+		ids,
+	)
+	rows, err := r.db.Query(q, args...)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var img model.ProductImage
+		if err := rows.Scan(&img.ID, &img.ProductID, &img.ImagePath, &img.IsPrimary, &img.SortOrder); err != nil {
+			return err
+		}
+		if i, ok := idx[img.ProductID]; ok {
+			products[i].Images = append(products[i].Images, img)
+		}
+	}
+	return rows.Err()
+}
+
+func buildInQuery(template string, ids []int64) (string, []any) {
+	placeholders := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+	return fmt.Sprintf(template, strings.Join(placeholders, ",")), args
 }
 
 func (r *ProductRepo) GetByID(id int64) (*model.Product, error) {
 	p := &model.Product{}
 	err := r.db.QueryRow(
-		`SELECT id,category_id,name,description,price,is_active,created_at FROM products WHERE id=$1`, id,
-	).Scan(&p.ID, &p.CategoryID, &p.Name, &p.Description, &p.Price, &p.IsActive, &p.CreatedAt)
+		`SELECT id,category_id,name,description,price,is_active,is_on_sale,created_at FROM products WHERE id=$1`, id,
+	).Scan(&p.ID, &p.CategoryID, &p.Name, &p.Description, &p.Price, &p.IsActive, &p.IsOnSale, &p.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -173,16 +236,16 @@ func (r *ProductRepo) GetByID(id int64) (*model.Product, error) {
 
 func (r *ProductRepo) Create(p *model.Product) error {
 	return r.db.QueryRow(
-		`INSERT INTO products(category_id,name,description,price,is_active)
-		 VALUES($1,$2,$3,$4,$5) RETURNING id`,
-		p.CategoryID, p.Name, p.Description, p.Price, p.IsActive,
+		`INSERT INTO products(category_id,name,description,price,is_active,is_on_sale)
+		 VALUES($1,$2,$3,$4,$5,$6) RETURNING id`,
+		p.CategoryID, p.Name, p.Description, p.Price, p.IsActive, p.IsOnSale,
 	).Scan(&p.ID)
 }
 
 func (r *ProductRepo) Update(p *model.Product) error {
 	_, err := r.db.Exec(
-		`UPDATE products SET category_id=$1,name=$2,description=$3,price=$4,is_active=$5 WHERE id=$6`,
-		p.CategoryID, p.Name, p.Description, p.Price, p.IsActive, p.ID,
+		`UPDATE products SET category_id=$1,name=$2,description=$3,price=$4,is_active=$5,is_on_sale=$6 WHERE id=$7`,
+		p.CategoryID, p.Name, p.Description, p.Price, p.IsActive, p.IsOnSale, p.ID,
 	)
 	return err
 }
@@ -236,7 +299,7 @@ func (r *ProductRepo) GetFeatured() (hits []model.Product, newest []model.Produc
 	hits = make([]model.Product, 0)
 	newest = make([]model.Product, 0)
 	hitRows, err := r.db.Query(
-		`SELECT p.id,p.category_id,p.name,p.description,p.price,p.is_active,p.created_at
+		`SELECT p.id,p.category_id,p.name,p.description,p.price,p.is_active,p.is_on_sale,p.created_at
 		 FROM products p
 		 JOIN (SELECT product_id, SUM(quantity) qty FROM order_items GROUP BY product_id) oi
 		   ON oi.product_id=p.id
@@ -251,7 +314,7 @@ func (r *ProductRepo) GetFeatured() (hits []model.Product, newest []model.Produc
 	for hitRows.Next() {
 		var p model.Product
 		if err := hitRows.Scan(&p.ID, &p.CategoryID, &p.Name, &p.Description,
-			&p.Price, &p.IsActive, &p.CreatedAt); err != nil {
+			&p.Price, &p.IsActive, &p.IsOnSale, &p.CreatedAt); err != nil {
 			return nil, nil, err
 		}
 		hits = append(hits, p)
@@ -261,7 +324,7 @@ func (r *ProductRepo) GetFeatured() (hits []model.Product, newest []model.Produc
 	}
 
 	newRows, err := r.db.Query(
-		`SELECT id,category_id,name,description,price,is_active,created_at FROM products
+		`SELECT id,category_id,name,description,price,is_active,is_on_sale,created_at FROM products
 		 WHERE is_active=true ORDER BY created_at DESC LIMIT 5`,
 	)
 	if err != nil {
@@ -271,12 +334,18 @@ func (r *ProductRepo) GetFeatured() (hits []model.Product, newest []model.Produc
 	for newRows.Next() {
 		var p model.Product
 		if err := newRows.Scan(&p.ID, &p.CategoryID, &p.Name, &p.Description,
-			&p.Price, &p.IsActive, &p.CreatedAt); err != nil {
+			&p.Price, &p.IsActive, &p.IsOnSale, &p.CreatedAt); err != nil {
 			return nil, nil, err
 		}
 		newest = append(newest, p)
 	}
 	if err := newRows.Err(); err != nil {
+		return nil, nil, err
+	}
+	if err := r.attachImages(hits); err != nil {
+		return nil, nil, err
+	}
+	if err := r.attachImages(newest); err != nil {
 		return nil, nil, err
 	}
 	return hits, newest, nil

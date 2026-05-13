@@ -1,6 +1,6 @@
 <template>
   <AppHeader />
-  <main style="min-height: calc(100vh - 120px); padding-top: 64px;">
+  <main class="app-main">
     <RouterView />
   </main>
   <AppFooter />
@@ -14,3 +14,13 @@ import { useAuthStore } from '@/stores/auth.js'
 const auth = useAuthStore()
 auth.init()
 </script>
+
+<style>
+.app-main {
+  min-height: calc(100vh - 320px);
+  padding-top: 72px;
+}
+@media (max-width: 768px) {
+  .app-main { padding-top: 60px; }
+}
+</style>

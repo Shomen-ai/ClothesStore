@@ -1,6 +1,11 @@
 <template>
   <div>
-    <h2 class="page-title">ЗАКАЗЫ</h2>
+    <header class="admin-view-head">
+      <div>
+        <p class="eyebrow">Админка / Операции</p>
+        <h1 class="head-title">Заказы <span class="gothic-accent">поток</span></h1>
+      </div>
+    </header>
     <div class="filters-row">
       <el-select v-model="statusFilter" placeholder="Статус" clearable @change="load" style="width:160px">
         <el-option v-for="s in statuses" :key="s.value" :value="s.value" :label="s.label" />
@@ -65,6 +70,19 @@ function formatPrice(p) { return new Intl.NumberFormat('ru-RU',{style:'currency'
 </script>
 
 <style scoped>
-.page-title { font-size: 20px; font-weight: 800; letter-spacing: 3px; margin-bottom: 24px; }
+.admin-view-head {
+  display: flex; justify-content: space-between; align-items: flex-end; gap: 24px;
+  padding-bottom: 24px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--border);
+}
+.head-title {
+  font-size: clamp(32px, 4vw, 48px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  margin-top: 12px;
+}
+.head-title .gothic-accent { font-size: 1.05em; }
 .filters-row { display: flex; gap: 16px; margin-bottom: 24px; }
 </style>

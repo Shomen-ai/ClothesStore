@@ -1,0 +1,322 @@
+╔══════════════════════════════════════════════════════════════════╗
+║              CLOTHES STORE  —  как всё устроено                 ║
+║              (объясняю максимально простыми словами)            ║
+╚══════════════════════════════════════════════════════════════════╝
+
+Это интернет-магазин одежды. Состоит из трёх частей:
+  1) База данных (PostgreSQL)  — где лежат все данные
+  2) Бэкенд (Go + Gin)         — мозги: принимает запросы, ходит в базу
+  3) Фронтенд (Vue 3 + Vite)   — морда: то, что видит человек в браузере
+
+Всё это упаковано в Docker Compose и крутится на сервере 31.130.151.134.
+
+
+───────────────────────────────────────────────────────────────────
+1. ТЕХНОЛОГИИ
+───────────────────────────────────────────────────────────────────
+
+БЭКЕНД  (папка /backend)
+  • Язык:       Go 1.22
+  • Фреймворк:  Gin (HTTP-роутер)
+  • БД-драйвер: pq (PostgreSQL)
+  • Авторизация: JWT (access + refresh токены)
+  • Пароли:     bcrypt
+  • Картинки:   локальная папка /uploads (volume в Docker)
+
+ФРОНТЕНД  (папка /frontend)
+  • Vue 3 (синтаксис <script setup>)
+  • Vite — сборщик
+  • Pinia — глобальный state (корзина, авторизация, wishlist)
+  • Vue Router — маршрутизация страниц
+  • Element Plus — готовые таблицы / формы / диалоги в админке
+  • Chart.js + vue-chartjs — графики
+  • Axios — http-клиент
+  • Шрифты:
+      Manrope        — основной sans-serif
+      Fraunces       — italic-serif для акцентов "по-русски"
+      JetBrains Mono — для всех технических подписей и цифр
+      Deutsch Gothic — готический акцент-шрифт (self-hosted .woff2)
+
+БАЗА ДАННЫХ
+  • PostgreSQL 16 (в Docker)
+  • Схема в /backend/internal/db/migrations/*.sql
+  • При первом запуске Postgres сам прогоняет миграции
+
+ДЕПЛОЙ
+  • docker-compose.yml в корне поднимает 3 контейнера: db, backend, frontend
+  • frontend = nginx, который раздаёт собранный Vite-бандл
+  • nginx проксирует /api/* в backend:8080
+  • Backend подключается к Postgres по DSN из переменных окружения
+
+
+───────────────────────────────────────────────────────────────────
+2. СУЩНОСТИ (что вообще существует в этом мире)
+───────────────────────────────────────────────────────────────────
+
+USER (пользователь)
+  Кто угодно зарегистрированный. Делится на два типа:
+    role = "customer"  — обычный клиент
+    role = "admin"     — у которого есть доступ к /admin/*
+  Поля: email, password_hash (bcrypt), name, phone, created_at
+
+ADDRESS (адрес доставки)
+  Принадлежит пользователю (user_id).
+  У одного юзера может быть несколько; один помечается is_default.
+  Поля: city, street, house, apartment, zip_code.
+
+CATEGORY (категория одежды)
+  Футболки, Свитеры, Носки, Аксессуары и т.д.
+  Поле sort_order — порядок отображения. Чем меньше — тем выше в каталоге.
+  Сейчас вверху Футболки (1), внизу Аксессуары (14).
+
+PRODUCT (товар)
+  Привязан к одной категории. Имеет name, description, price,
+  is_active (показывать ли в каталоге), is_on_sale (распродажа?).
+
+PRODUCT_SIZE (размер товара)
+  У одного товара несколько размеров (S, M, L, XL, ...).
+  Каждый размер хранит stock_qty — сколько штук на складе.
+  Когда заказ оформляется, мы списываем со склада не product, а
+  именно конкретный product_size.
+
+PRODUCT_IMAGE (фото товара)
+  У товара несколько фоток с порядком (sort_order) и пометкой is_primary.
+
+PROMO_CODE (промокод)
+  code, discount_type (percent / fixed), discount_value,
+  max_activations, activations_count, expires_at, is_active.
+  Применяется при оформлении заказа — кладётся в orders.promo_code_id.
+
+ORDER (заказ)
+  user_id  — кто заказал
+  address_id — куда везти
+  promo_code_id — каким промиком воспользовался (NULL если без)
+  status   — pending / confirmed / shipped / delivered / cancelled
+  total_price — итоговая сумма (после скидки)
+  discount_amount — сколько скинули
+  created_at — когда оформил
+
+ORDER_ITEM (позиция в заказе)
+  Чтобы не терять цену при изменении price товара, мы фиксируем
+  price_at_order на момент заказа. Тут же лежат:
+  product_id, product_size_id, quantity.
+
+WISHLIST (избранное)
+  Связь user ↔ product. Чисто отметка "хочу".
+
+
+───────────────────────────────────────────────────────────────────
+3. КАК УСТРОЕНА БАЗА (связи)
+───────────────────────────────────────────────────────────────────
+
+           users  ──┬──>  addresses
+                   ├──>  orders  ──>  order_items  ──> product_sizes
+                   │       │                     └──> products
+                   │       └──>  promo_codes
+                   └──>  wishlist  ──>  products
+
+           categories  ──<  products  ──<  product_sizes
+                                       └<  product_images
+
+  Чтение справа налево:
+  • один пользователь — много адресов
+  • один пользователь — много заказов
+  • один заказ — много позиций (order_items)
+  • одна позиция — один товар + один конкретный размер
+  • одна категория — много товаров
+  • один товар — много размеров
+  • один товар — много фоток
+
+
+───────────────────────────────────────────────────────────────────
+4. ВОРКФЛОУ (что происходит с точки зрения людей)
+───────────────────────────────────────────────────────────────────
+
+ГОСТЬ (никто не залогинен)
+  → заходит на /catalogue
+  → видит товары, может листать, фильтровать, искать
+  → может положить в корзину (она хранится в localStorage, не в БД)
+  → НЕ может оформить заказ — нужно войти
+
+КЛИЕНТ (зарегистрировался)
+  → POST /api/auth/register   получает access + refresh JWT
+  → токены кладутся в localStorage
+  → axios в каждый запрос подставляет Authorization: Bearer <access>
+  → если access протух — interceptor сам дёргает /auth/refresh
+  → может посмотреть профиль, заказы, избранное (/account/*)
+  → оформляет заказ:
+       POST /api/orders
+         { address_id, promo_code, items: [{product_size_id, quantity}] }
+       сервер сам считает total_price, применяет промокод,
+       списывает со склада, создаёт order + order_items
+
+АДМИН (admin@clothesstore.ru / admin123)
+  → /admin → дашборд: выручка, статусы заказов, топ товаров, активации промокодов
+  → /admin/products  — CRUD товаров (создание, размеры, фотки, sale-флаг)
+  → /admin/orders    — список заказов с фильтрами по статусу и дате,
+                       можно сменить статус прямо в строке
+  → /admin/promo-codes — создание промокодов, деактивация
+
+
+───────────────────────────────────────────────────────────────────
+5. ДАТАФЛОУ (как бегают данные)
+───────────────────────────────────────────────────────────────────
+
+(А) Просмотр каталога
+
+  Браузер
+    │ GET /catalogue
+    ▼
+  Vue Router → CatalogueView.vue
+    │ при монтировании: getCategories() + getProducts(filters)
+    ▼
+  axios.get('/api/products?category=&size=&sort=...')
+    │
+    ▼
+  nginx (фронт-контейнер) → проксирует на backend:8080
+    │
+    ▼
+  Gin → CatalogueHandler.List → ProductRepo.List
+    │ собирает динамический SQL: WHERE + JOIN categories ORDER BY sort_order
+    ▼
+  PostgreSQL  → возвращает [{id, name, price, images, ...}]
+    │
+    ▼
+  axios получает JSON → Vue реактивно перерисовывает grid карточек
+
+(Б) Оформление заказа
+
+  CartView.vue → нажимает "Оформить"
+    │
+    ▼
+  POST /api/orders { address_id, items, promo_code }
+    │ + Bearer <access_token>
+    ▼
+  Gin middleware Auth → достаёт user_id из JWT
+    ▼
+  OrderHandler.Create → OrderRepo.Create в одной транзакции:
+    1. валидирует промокод (если есть)
+    2. для каждого item проверяет stock_qty и списывает
+    3. вставляет в orders + order_items
+    4. если промо — увеличивает activations_count
+    5. возвращает order_id
+    ▼
+  Фронт → cart.clear() → router.push('/checkout-success')
+
+(В) Админская статистика
+
+  DashboardView.vue → при смене периода:
+    Promise.all([
+      getRevenueStats(period),       // /admin/stats/revenue
+      getOrderStats(period),         // /admin/stats/orders (вмещает by_status + top_products)
+      getPromoStats(period)          // /admin/stats/promo-codes
+    ])
+    │
+    ▼
+  Gin middleware AdminOnly → проверяет role=admin в JWT
+    ▼
+  StatsRepo.GetRevenue / GetOrderCounts / GetTopProducts / GetPromoStats
+    │ строит SQL с условием по периоду (day / week / month / quarter / all)
+    │ группирует по дням или неделям
+    ▼
+  Возвращает массивы точек → Chart.js на фронте рисует линию,
+  списки заполняют карточки.
+
+
+───────────────────────────────────────────────────────────────────
+6. СТРУКТУРА РЕПОЗИТОРИЯ
+───────────────────────────────────────────────────────────────────
+
+  /
+  ├── backend/
+  │   ├── cmd/main.go                  ← точка входа, поднимает Gin
+  │   ├── internal/
+  │   │   ├── handler/                 ← HTTP-обработчики (gin handlers)
+  │   │   ├── service/                 ← бизнес-логика (auth, orders)
+  │   │   ├── repository/              ← всё, что лазит в БД (SQL)
+  │   │   ├── model/                   ← типы данных (Product, Order, ...)
+  │   │   ├── middleware/              ← Auth, AdminOnly, CORS
+  │   │   └── db/
+  │   │       └── migrations/
+  │   │           ├── 001_initial.sql  ← схема + seed admin
+  │   │           └── 002_sale.sql     ← добавление is_on_sale
+  │   └── Dockerfile
+  │
+  ├── frontend/
+  │   ├── index.html
+  │   ├── vite.config.js
+  │   ├── src/
+  │   │   ├── main.js                  ← инициализация Vue + Pinia + Router
+  │   │   ├── router/                  ← все маршруты, guards для /admin
+  │   │   ├── stores/                  ← Pinia: auth.js, cart.js, wishlist.js
+  │   │   ├── api/                     ← axios-обёртки по доменам
+  │   │   ├── assets/
+  │   │   │   ├── styles/main.css      ← дизайн-токены, глобальные стили,
+  │   │   │   │                          @font-face, .gothic-accent, marquee
+  │   │   │   └── fonts/DeutschGothic.woff2
+  │   │   ├── components/              ← переиспользуемые куски UI
+  │   │   └── views/                   ← страницы (page-level компоненты)
+  │   │       ├── account/             ← Личный кабинет
+  │   │       └── admin/               ← Админка
+  │   └── Dockerfile  (multi-stage: build → nginx)
+  │
+  ├── scripts/                         ← скрапер каталога (Python)
+  │   ├── import_torch.py              ← вытаскивает товары с источника
+  │   ├── products.json                ← результат скрапа
+  │   └── _images/                     ← скачанные фотки (НЕ коммитятся, 6 GB)
+  │
+  ├── docker-compose.yml               ← поднимает всё одной командой
+  └── EXPLONATION.TXT                  ← этот файл
+
+
+───────────────────────────────────────────────────────────────────
+7. КАК ЗАПУСТИТЬ ЛОКАЛЬНО
+───────────────────────────────────────────────────────────────────
+
+  Нужны: Docker + Docker Compose.
+
+  $ git clone <repo> && cd ClothesStore
+  $ docker compose up -d --build
+
+  Готово:
+    http://localhost           ← фронт (страница магазина)
+    http://localhost:8080/api  ← API
+    db слушает только внутри docker-network на порту 5432
+
+  Учётные записи (из seed):
+    admin@clothesstore.ru / admin123          — администратор
+    test@store.local      / Test1234          — обычный клиент
+    aleksey@mail.ru ...   / admin123          — 12 seed-клиентов
+
+
+───────────────────────────────────────────────────────────────────
+8. ЧТО ВАЖНО ПОНИМАТЬ ПРО ДИЗАЙН
+───────────────────────────────────────────────────────────────────
+
+  Тёмная палитра, accent-цвет — красный #e11900 (--accent).
+  Все шрифты подключены через CSS-переменные:
+    --font-sans  / --font-serif / --font-mono / --font-gothic
+
+  Брендовая фишка — выделение 1–2 слов готическим Deutsch Gothic
+  через класс .gothic-accent (он живёт в main.css и доступен везде).
+
+  Marquee — крутящийся фон шапок (Catalogue / Cart / Account / Admin).
+  Это блок .head-marquee-wrap (тоже в main.css), три ряда крутятся
+  с разной скоростью и в разные стороны, наклонены на -6°.
+
+
+───────────────────────────────────────────────────────────────────
+9. ТИПИЧНЫЕ ТОЧКИ КОНТАКТА (если что-то менять)
+───────────────────────────────────────────────────────────────────
+
+  • Добавить категорию  → /admin/products создаст товар в нужной;
+                           сами категории редактируются в БД
+                           (categories.sort_order — порядок).
+  • Изменить дизайн     → frontend/src/assets/styles/main.css
+                           (там сидят все токены и утилиты).
+  • Добавить эндпойнт   → backend/internal/handler + добавить роут
+                           в backend/cmd/main.go.
+  • Изменить SQL запрос → backend/internal/repository/*.go.
+  • Изменить шапку      → AppHeader.vue / AppFooter.vue.
+
+───────────────────────────────────────────────────────────────────

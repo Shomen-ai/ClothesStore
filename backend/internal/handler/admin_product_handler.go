@@ -81,6 +81,7 @@ func (h *AdminProductHandler) CreateProduct(c *gin.Context) {
 		Description string             `json:"description"`
 		Price       float64            `json:"price" binding:"required,gt=0"`
 		IsActive    bool               `json:"is_active"`
+		IsOnSale    bool               `json:"is_on_sale"`
 		Sizes       []model.ProductSize `json:"sizes"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -93,6 +94,7 @@ func (h *AdminProductHandler) CreateProduct(c *gin.Context) {
 		Description: req.Description,
 		Price:       req.Price,
 		IsActive:    req.IsActive,
+		IsOnSale:    req.IsOnSale,
 	}
 	if err := h.repo.Create(p); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -116,6 +118,7 @@ func (h *AdminProductHandler) UpdateProduct(c *gin.Context) {
 		Description string             `json:"description"`
 		Price       float64            `json:"price"`
 		IsActive    bool               `json:"is_active"`
+		IsOnSale    bool               `json:"is_on_sale"`
 		Sizes       []model.ProductSize `json:"sizes"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -129,6 +132,7 @@ func (h *AdminProductHandler) UpdateProduct(c *gin.Context) {
 		Description: req.Description,
 		Price:       req.Price,
 		IsActive:    req.IsActive,
+		IsOnSale:    req.IsOnSale,
 	}
 	if err := h.repo.Update(p); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

@@ -31,6 +31,7 @@ type Product struct {
 	Description string         `json:"description"`
 	Price       float64        `json:"price"`
 	IsActive    bool           `json:"is_active"`
+	IsOnSale    bool           `json:"is_on_sale"`
 	CreatedAt   time.Time      `json:"created_at"`
 	Images      []ProductImage `json:"images,omitempty"`
 	Sizes       []ProductSize  `json:"sizes,omitempty"`
