@@ -7,34 +7,47 @@
 }
 
 :root {
+  /* === LIGHT THEME (default) === */
   /* surfaces */
-  --bg:          #08080c;
-  --bg-soft:     #0c0c12;
-  --bg-surface:  rgba(255, 255, 255, 0.035);
-  --bg-elevated: rgba(255, 255, 255, 0.055);
-  --bg-overlay:  rgba(8, 8, 12, 0.7);
+  --bg:          #f6f3ee;
+  --bg-soft:     #ece7df;
+  --bg-surface:  rgba(0, 0, 0, 0.04);
+  --bg-elevated: rgba(0, 0, 0, 0.07);
+  --bg-overlay:  rgba(246, 243, 238, 0.75);
 
   /* borders */
-  --border:        rgba(255, 255, 255, 0.07);
-  --border-strong: rgba(255, 255, 255, 0.14);
+  --border:        rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.18);
 
   /* text */
-  --text:        #f5f5f7;
-  --text-soft:   #c8c8d2;
-  --text-muted:  #8a8a96;
-  --text-dim:    #5a5a64;
+  --text:        #14141a;
+  --text-soft:   #34343e;
+  --text-muted:  #6c6c78;
+  --text-dim:    #9a9aa6;
 
-  /* accents — blood red, streetwear punch */
+  /* accents — same red on both themes */
   --accent:        #e11900;
   --accent-soft:   #ff3a1f;
-  --accent-glow:   rgba(225, 25, 0, 0.55);
+  --accent-glow:   rgba(225, 25, 0, 0.45);
   --accent-haze:   rgba(225, 25, 0, 0.10);
 
   --sale:        #ff7849;
   --sale-soft:   #ff9d75;
   --sale-glow:   rgba(255, 120, 73, 0.45);
 
-  --danger:    #ef4848;
+  --danger:    #d23a3a;
+
+  /* theme-derived chrome (header, dialog, dropdowns, grain blend) */
+  --header-bg-from: rgba(246, 243, 238, 0.88);
+  --header-bg-to:   rgba(246, 243, 238, 0.55);
+  --header-bg-from-scrolled: rgba(246, 243, 238, 0.96);
+  --header-bg-to-scrolled:   rgba(246, 243, 238, 0.85);
+  --elevated-solid: #ffffff;
+  --grain-blend:    multiply;
+  --grain-opacity:  0.5;
+
+  /* marquee text base (overridden per row in component CSS); used as fallback */
+  --marquee-text-rgb: 20, 20, 26;
 
   /* typography */
   --font-sans:    'Manrope', system-ui, -apple-system, sans-serif;
@@ -56,6 +69,36 @@
   --color-success:     var(--accent);
 }
 
+/* === DARK THEME === */
+[data-theme="dark"] {
+  --bg:          #08080c;
+  --bg-soft:     #0c0c12;
+  --bg-surface:  rgba(255, 255, 255, 0.035);
+  --bg-elevated: rgba(255, 255, 255, 0.055);
+  --bg-overlay:  rgba(8, 8, 12, 0.7);
+
+  --border:        rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.14);
+
+  --text:        #f5f5f7;
+  --text-soft:   #c8c8d2;
+  --text-muted:  #8a8a96;
+  --text-dim:    #5a5a64;
+
+  --accent-glow: rgba(225, 25, 0, 0.55);
+  --danger:    #ef4848;
+
+  --header-bg-from: rgba(8, 8, 12, 0.85);
+  --header-bg-to:   rgba(8, 8, 12, 0.55);
+  --header-bg-from-scrolled: rgba(8, 8, 12, 0.95);
+  --header-bg-to-scrolled:   rgba(8, 8, 12, 0.85);
+  --elevated-solid: #0f0f15;
+  --grain-blend:    overlay;
+  --grain-opacity:  0.7;
+
+  --marquee-text-rgb: 245, 245, 247;
+}
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
@@ -67,6 +110,7 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
   min-height: 100vh;
   scroll-behavior: smooth;
+  transition: background-color .3s ease, color .3s ease;
 }
 
 /* Atmospheric backdrop: soft emerald + coral haze, plus film grain. */
@@ -85,8 +129,8 @@ body::after {
   position: fixed; inset: 0;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.95   0 0 0 0 0.95   0 0 0 0 1   0 0 0 0.04 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   pointer-events: none;
-  opacity: 0.7;
-  mix-blend-mode: overlay;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
   z-index: -1;
 }
 
@@ -214,18 +258,22 @@ a:hover { color: var(--accent-soft); }
   flex-shrink: 0;
   padding-right: 0;
 }
-.marquee-row.row-1 { font-size: clamp(56px, 8.5vw, 116px); color: rgba(245, 245, 247, 0.05); }
+.marquee-row.row-1 { font-size: clamp(56px, 8.5vw, 116px); color: rgba(var(--marquee-text-rgb), 0.08); }
 .marquee-row.row-1 .marquee-track { animation: marquee-left 42s linear infinite; }
 .marquee-row.row-2 {
   font-size: clamp(36px, 5vw, 72px);
-  color: rgba(225, 25, 0, 0.14);
+  color: rgba(225, 25, 0, 0.18);
   font-style: italic;
   font-family: var(--font-serif);
   letter-spacing: 0;
 }
 .marquee-row.row-2 .marquee-track { animation: marquee-right 58s linear infinite; }
-.marquee-row.row-3 { font-size: clamp(56px, 8.5vw, 116px); color: rgba(245, 245, 247, 0.045); }
+.marquee-row.row-3 { font-size: clamp(56px, 8.5vw, 116px); color: rgba(var(--marquee-text-rgb), 0.07); }
 .marquee-row.row-3 .marquee-track { animation: marquee-left 72s linear infinite; }
+
+[data-theme="dark"] .marquee-row.row-1 { color: rgba(var(--marquee-text-rgb), 0.05); }
+[data-theme="dark"] .marquee-row.row-2 { color: rgba(225, 25, 0, 0.14); }
+[data-theme="dark"] .marquee-row.row-3 { color: rgba(var(--marquee-text-rgb), 0.045); }
 
 @keyframes marquee-left {
   from { transform: translateX(0); }
@@ -332,14 +380,14 @@ a:hover { color: var(--accent-soft); }
 }
 .el-table tr:hover > td.el-table__cell { color: var(--text); }
 .el-dialog {
-  --el-dialog-bg-color: #0f0f15 !important;
+  --el-dialog-bg-color: var(--elevated-solid) !important;
   --el-dialog-title-font-size: 14px;
   border: 1px solid var(--border-strong);
   border-radius: 4px !important;
 }
 .el-card { --el-card-bg-color: var(--bg-surface) !important; --el-card-border-color: var(--border) !important; }
-.el-select-dropdown { --el-bg-color-overlay: #11111a !important; border: 1px solid var(--border-strong) !important; }
-.el-message { background: #11111a !important; border: 1px solid var(--border-strong) !important; color: var(--text) !important; }
+.el-select-dropdown { --el-bg-color-overlay: var(--elevated-solid) !important; border: 1px solid var(--border-strong) !important; }
+.el-message { background: var(--elevated-solid) !important; border: 1px solid var(--border-strong) !important; color: var(--text) !important; }
 .el-tag { background: var(--bg-elevated) !important; border-color: var(--border-strong) !important; color: var(--text) !important; }
 .el-tag--danger { background: rgba(255, 120, 73, 0.12) !important; border-color: var(--sale) !important; color: var(--sale-soft) !important; }
 

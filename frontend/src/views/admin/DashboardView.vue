@@ -27,6 +27,11 @@
         <p class="eyebrow">Админка / Дашборд</p>
         <h1 class="head-title">Цифры <span class="gothic-accent">громко</span></h1>
       </div>
+      <button class="cta-add report-cta" :disabled="reportLoading" @click="downloadReport">
+        <span class="cta-mark">⇩</span>
+        <span class="cta-label">{{ reportLoading ? 'Готовим…' : 'Скачать отчёт' }}</span>
+        <span class="cta-arrow">.xlsx</span>
+      </button>
     </header>
 
     <div class="period-bar">
@@ -47,7 +52,7 @@
           <span class="card-period">/ {{ currentPeriodLabel }}</span>
         </div>
         <div class="big-number">{{ formatPrice(totalRevenue) }}</div>
-        <StatsChart :points="revenuePoints" :key="period" />
+        <StatsChart :points="revenuePoints" :key="`${period}-${theme.theme}`" />
       </article>
 
       <article class="stat-card">
@@ -98,14 +103,40 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { getRevenueStats, getOrderStats, getPromoStats } from '@/api/admin.js'
+import { getRevenueStats, getOrderStats, getPromoStats, downloadExcelReport } from '@/api/admin.js'
 import StatsChart from '@/components/admin/StatsChart.vue'
+import { useThemeStore } from '@/stores/theme.js'
+
+const theme = useThemeStore()
 
 const period = ref('month')
 const revenuePoints = ref([])
 const orderStats = ref([])
 const topProducts = ref([])
 const promoStats = ref([])
+const reportLoading = ref(false)
+
+async function downloadReport() {
+  reportLoading.value = true
+  try {
+    const res = await downloadExcelReport()
+    const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    const now = new Date()
+    const pad = n => String(n).padStart(2, '0')
+    a.href = url
+    a.download = `report_${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}.xlsx`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    console.error(e)
+  } finally {
+    reportLoading.value = false
+  }
+}
 
 const periodOptions = [
   { value: 'day',     label: 'День' },
@@ -152,11 +183,19 @@ function formatPrice(p) {
   overflow: visible;
   isolation: isolate;
   display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  gap: 16px;
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
 }
-.head-text { position: relative; z-index: 2; }
+.head-text { position: relative; z-index: 2; flex: 1; }
+.report-cta { position: relative; z-index: 2; flex-shrink: 0; }
+.report-cta:disabled { opacity: 0.7; cursor: progress; }
+.report-cta .cta-arrow { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em; }
+@media (max-width: 720px) {
+  .view-head { flex-direction: column; align-items: stretch; }
+  .report-cta { align-self: flex-start; }
+}
 .head-title {
   font-size: clamp(36px, 5vw, 56px);
   font-weight: 700;

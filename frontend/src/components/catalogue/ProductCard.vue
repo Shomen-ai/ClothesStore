@@ -68,7 +68,7 @@ function formatPrice(p) {
 .frame::after {
   content: '';
   position: absolute; inset: 0;
-  background: linear-gradient(180deg, transparent 60%, rgba(8,8,12,0.55));
+  background: linear-gradient(180deg, transparent 60%, var(--bg-overlay));
   pointer-events: none;
   opacity: 0;
   transition: opacity .4s ease;
@@ -103,7 +103,7 @@ function formatPrice(p) {
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--sale-soft);
-  background: rgba(8,8,12,0.7);
+  background: var(--bg-overlay);
   border: 1px solid var(--sale);
   backdrop-filter: blur(8px);
   box-shadow: 0 0 16px -4px var(--sale-glow);
@@ -118,7 +118,7 @@ function formatPrice(p) {
   position: absolute; top: 10px; right: 10px;
   z-index: 2;
   width: 32px; height: 32px; border-radius: 50%;
-  background: rgba(8,8,12,0.55);
+  background: var(--bg-overlay);
   backdrop-filter: blur(8px);
   border: 1px solid var(--border-strong);
   color: var(--text-muted);

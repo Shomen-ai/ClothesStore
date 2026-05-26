@@ -1,49 +1,150 @@
 <template>
   <div class="auth-page">
     <div class="auth-card">
-      <h1 class="auth-title">Регистрация</h1>
-      <el-form :model="form" @submit.prevent="handleRegister" label-position="top">
-        <el-form-item label="Имя">
-          <el-input v-model="form.name" placeholder="Ваше имя" />
-        </el-form-item>
-        <el-form-item label="Email">
-          <el-input v-model="form.email" type="email" placeholder="your@email.com" />
-        </el-form-item>
-        <el-form-item label="Телефон">
-          <el-input v-model="form.phone" placeholder="+7 (999) 999-99-99" />
-        </el-form-item>
-        <el-form-item label="Пароль">
-          <el-input v-model="form.password" type="password" show-password placeholder="Минимум 6 символов" />
-        </el-form-item>
-        <el-alert v-if="error" :title="error" type="error" :closable="false" style="margin-bottom:16px" />
-        <el-button type="primary" native-type="submit" :loading="loading" style="width:100%">
-          Создать аккаунт
-        </el-button>
-      </el-form>
-      <p class="auth-link">Уже есть аккаунт? <RouterLink to="/login">Войти</RouterLink></p>
+      <p class="eyebrow">Аккаунт / шаг {{ step }} из 2</p>
+
+      <!-- step 1: form -->
+      <template v-if="step === 1">
+        <h1 class="auth-title">Стань <span class="gothic-accent">своим</span></h1>
+        <p class="auth-sub">5 секунд — и ты в листе drop-уведомлений и закрытых распродаж.</p>
+
+        <form class="auth-form" @submit.prevent="goToCode">
+          <label class="field">
+            <span class="field-label">Имя</span>
+            <input v-model="form.name" placeholder="Как тебя зовут" required />
+          </label>
+          <label class="field">
+            <span class="field-label">Email</span>
+            <input v-model="form.email" type="email" placeholder="your@email.com" autocomplete="email" required />
+          </label>
+          <label class="field">
+            <span class="field-label">Телефон</span>
+            <input v-model="form.phone" placeholder="+7 (999) 999-99-99" autocomplete="tel" />
+          </label>
+          <label class="field">
+            <span class="field-label">Пароль</span>
+            <input v-model="form.password" type="password" placeholder="Минимум 6 символов" autocomplete="new-password" required minlength="6" />
+          </label>
+
+          <p v-if="error" class="auth-error">{{ error }}</p>
+
+          <button class="auth-submit" type="submit">
+            <span>Отправить код</span>
+            <span class="arrow">→</span>
+          </button>
+        </form>
+      </template>
+
+      <!-- step 2: email verification -->
+      <template v-else>
+        <h1 class="auth-title">Проверь <span class="gothic-accent">почту</span></h1>
+        <p class="auth-sub">
+          Мы отправили код на
+          <span class="email-pill">{{ form.email }}</span>
+          — введи 6 цифр, чтобы подтвердить email.
+        </p>
+
+        <form class="auth-form" @submit.prevent="confirmCode">
+          <div class="code-grid">
+            <input v-for="(_, i) in 6" :key="i"
+              :ref="el => codeInputs[i] = el"
+              v-model="code[i]"
+              class="code-cell"
+              inputmode="numeric" maxlength="1"
+              @input="onCodeInput(i, $event)"
+              @keydown.backspace="onBackspace(i, $event)"
+              @paste.prevent="onPaste"
+            />
+          </div>
+
+          <p v-if="error" class="auth-error">{{ error }}</p>
+
+          <button class="auth-submit" type="submit" :disabled="loading || codeStr.length !== 6">
+            <span>{{ loading ? 'Создаём…' : 'Подтвердить и войти' }}</span>
+            <span class="arrow">→</span>
+          </button>
+        </form>
+
+        <p class="auth-hint">
+          <button class="link-btn" type="button" @click="step = 1">← Изменить данные</button>
+          <span class="hint-meta">demo-код: <code>123456</code></span>
+        </p>
+      </template>
+
+      <p class="auth-link">
+        Уже есть аккаунт?
+        <RouterLink to="/login">Войти</RouterLink>
+      </p>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, nextTick } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
+
+const VERIFY_CODE = '123456'
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
+
+const step = ref(1)
 const form = ref({ name: '', email: '', phone: '', password: '' })
+const code = ref(['', '', '', '', '', ''])
+const codeInputs = []
 const error = ref('')
 const loading = ref(false)
 
-async function handleRegister() {
+const codeStr = computed(() => code.value.join(''))
+
+function goToCode() {
   error.value = ''
+  if (form.value.password.length < 6) {
+    error.value = 'Пароль должен быть не короче 6 символов'
+    return
+  }
+  step.value = 2
+  nextTick(() => codeInputs[0]?.focus())
+}
+
+function onCodeInput(i, e) {
+  const v = e.target.value.replace(/\D/g, '').slice(-1)
+  code.value[i] = v
+  if (v && i < 5) codeInputs[i + 1]?.focus()
+}
+
+function onBackspace(i, e) {
+  if (!code.value[i] && i > 0) {
+    codeInputs[i - 1]?.focus()
+    code.value[i - 1] = ''
+    e.preventDefault()
+  }
+}
+
+function onPaste(e) {
+  const text = (e.clipboardData?.getData('text') || '').replace(/\D/g, '').slice(0, 6)
+  if (!text) return
+  for (let i = 0; i < 6; i++) code.value[i] = text[i] || ''
+  const last = Math.min(text.length, 5)
+  codeInputs[last]?.focus()
+}
+
+async function confirmCode() {
+  error.value = ''
+  if (codeStr.value !== VERIFY_CODE) {
+    error.value = 'Неверный код. Попробуй 123456 (demo).'
+    return
+  }
   loading.value = true
   try {
     await auth.register(form.value)
-    router.push('/account')
+    const redirect = route.query.redirect
+    router.push(redirect || '/account')
   } catch (e) {
-    error.value = e.response?.data?.error || 'Ошибка регистрации'
+    error.value = e.response?.data?.error || 'Не удалось завершить регистрацию'
+    step.value = 1
   } finally {
     loading.value = false
   }
@@ -51,8 +152,172 @@ async function handleRegister() {
 </script>
 
 <style scoped>
-.auth-page { display: flex; align-items: center; justify-content: center; min-height: 80vh; padding: 24px; }
-.auth-card { width: 100%; max-width: 400px; background: var(--color-bg-surface); border: 1px solid var(--color-border); border-radius: 8px; padding: 40px; }
-.auth-title { font-size: 24px; font-weight: 700; margin-bottom: 32px; }
-.auth-link { margin-top: 20px; text-align: center; color: var(--color-text-muted); font-size: 14px; }
+.auth-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 80px);
+  padding: 96px 24px 64px;
+}
+.auth-card {
+  width: 100%;
+  max-width: 460px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  padding: 44px 40px 36px;
+  backdrop-filter: blur(8px);
+  position: relative;
+}
+.auth-card::before {
+  content: '';
+  position: absolute; top: -1px; left: -1px; width: 28px; height: 28px;
+  border-top: 2px solid var(--accent);
+  border-left: 2px solid var(--accent);
+  pointer-events: none;
+}
+.auth-card::after {
+  content: '';
+  position: absolute; bottom: -1px; right: -1px; width: 28px; height: 28px;
+  border-bottom: 2px solid var(--accent);
+  border-right: 2px solid var(--accent);
+  pointer-events: none;
+}
+
+.auth-title {
+  font-size: clamp(36px, 4.5vw, 48px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  margin: 12px 0 12px;
+}
+.auth-title .gothic-accent { font-size: 1.05em; }
+.auth-sub {
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.55;
+  margin-bottom: 24px;
+}
+.email-pill {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: var(--text);
+  background: var(--bg-elevated);
+  padding: 2px 8px;
+  border: 1px solid var(--border-strong);
+  margin: 0 2px;
+}
+
+.auth-form { display: flex; flex-direction: column; gap: 16px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.field input {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-strong);
+  color: var(--text);
+  padding: 10px 0;
+  font-size: 15px;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: border-color .2s ease;
+}
+.field input:focus { border-bottom-color: var(--accent); }
+.field input::placeholder { color: var(--text-dim); }
+
+.code-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.code-cell {
+  width: 100%;
+  height: 56px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  font: 600 22px/1 var(--font-mono);
+  text-align: center;
+  outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.code-cell:focus {
+  border-color: var(--accent);
+  background: var(--bg-surface);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.auth-error {
+  font-size: 13px;
+  color: var(--danger);
+  background: rgba(239, 72, 72, 0.08);
+  border: 1px solid rgba(239, 72, 72, 0.3);
+  padding: 8px 12px;
+  margin-top: -4px;
+}
+
+.auth-submit {
+  margin-top: 12px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 12px;
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  padding: 14px 20px;
+  font: 500 12px/1 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background .2s ease, transform .15s ease, box-shadow .25s ease;
+}
+.auth-submit:hover:not(:disabled) {
+  background: var(--accent-soft);
+  box-shadow: 0 14px 32px -10px var(--accent-glow);
+  transform: translateY(-1px);
+}
+.auth-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+.auth-submit .arrow { font-family: var(--font-mono); }
+
+.auth-hint {
+  margin-top: 18px;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.link-btn {
+  background: transparent; border: 0; padding: 0; cursor: pointer;
+  color: var(--text-muted); font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: 0.1em; text-transform: uppercase;
+}
+.link-btn:hover { color: var(--text); }
+.hint-meta {
+  font-family: var(--font-mono); font-size: 11px;
+  letter-spacing: 0.06em; color: var(--text-dim);
+}
+.hint-meta code {
+  color: var(--accent); background: var(--bg-elevated);
+  padding: 2px 6px; border: 1px solid var(--border-strong);
+}
+
+.auth-link {
+  margin-top: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.auth-link a {
+  color: var(--accent);
+  font-weight: 500;
+  border-bottom: 1px solid currentColor;
+  padding-bottom: 1px;
+}
+.auth-link a:hover { color: var(--accent-soft); }
 </style>

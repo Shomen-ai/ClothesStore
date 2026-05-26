@@ -24,3 +24,5 @@ export const adminDeletePromo = (id) => api.delete(`/admin/promo-codes/${id}`)
 export const getRevenueStats = (period) => api.get('/admin/stats/revenue', { params: { period } })
 export const getOrderStats = (period) => api.get('/admin/stats/orders', { params: { period } })
 export const getPromoStats = (period) => api.get('/admin/stats/promo-codes', { params: { period } })
+// Reports
+export const downloadExcelReport = () => api.get('/admin/reports/excel', { responseType: 'blob' })

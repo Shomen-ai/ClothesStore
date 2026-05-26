@@ -6,6 +6,7 @@ import * as ElIcons from '@element-plus/icons-vue'
 import App from './App.vue'
 import router from './router/index.js'
 import './assets/styles/main.css'
+import { useThemeStore } from './stores/theme.js'
 
 const app = createApp(App)
 app.use(createPinia())
@@ -13,5 +14,7 @@ app.use(ElementPlus, { size: 'default' })
 app.use(router)
 
 Object.keys(ElIcons).forEach(key => app.component(key, ElIcons[key]))
+
+useThemeStore().init()
 
 app.mount('#app')

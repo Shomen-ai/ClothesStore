@@ -59,7 +59,7 @@
   align-self: flex-start;
   height: calc(100vh - 72px);
   border-right: 1px solid var(--border);
-  background: linear-gradient(180deg, rgba(8,8,12,0.6), rgba(8,8,12,0.3));
+  background: linear-gradient(180deg, var(--header-bg-from), var(--header-bg-to));
   backdrop-filter: blur(12px);
   padding: 32px 0 24px;
   display: flex;

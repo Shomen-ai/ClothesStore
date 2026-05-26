@@ -15,6 +15,20 @@
       </nav>
 
       <div class="header-actions">
+        <button class="action theme-toggle" :class="{ 'is-dark': theme.theme === 'dark' }"
+          @click="theme.toggle()"
+          :aria-label="theme.theme === 'dark' ? 'Переключить на светлую тему' : 'Переключить на тёмную тему'">
+          <svg class="theme-icon sun" width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <circle cx="10" cy="10" r="3.6" stroke="currentColor" stroke-width="1.4"/>
+            <path d="M10 1.5v2.4M10 16.1v2.4M3.5 3.5l1.7 1.7M14.8 14.8l1.7 1.7M1.5 10h2.4M16.1 10h2.4M3.5 16.5l1.7-1.7M14.8 5.2l1.7-1.7"
+              stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+          <svg class="theme-icon moon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M16 11.5A6.5 6.5 0 0 1 8.5 4a1 1 0 0 0-1.4-0.95A7.5 7.5 0 1 0 16.95 12.9 1 1 0 0 0 16 11.5z"
+              stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
+          </svg>
+        </button>
+
         <RouterLink to="/cart" class="action cart-action" aria-label="Корзина">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
             <path d="M3 5h2l1.5 9.5a1 1 0 0 0 1 .85h7a1 1 0 0 0 1-.85L17 7H6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
@@ -55,10 +69,12 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useAuthStore } from '@/stores/auth.js'
 import { useCartStore } from '@/stores/cart.js'
+import { useThemeStore } from '@/stores/theme.js'
 import { useRouter } from 'vue-router'
 
 const auth = useAuthStore()
 const cart = useCartStore()
+const theme = useThemeStore()
 const router = useRouter()
 const scrolled = ref(false)
 
@@ -73,7 +89,7 @@ function handleLogout() { auth.logout(); router.push('/login') }
 <style scoped>
 .app-header {
   position: fixed; top: 0; left: 0; right: 0; z-index: 100;
-  background: linear-gradient(180deg, rgba(8,8,12,0.85), rgba(8,8,12,0.55));
+  background: linear-gradient(180deg, var(--header-bg-from), var(--header-bg-to));
   backdrop-filter: blur(18px) saturate(140%);
   -webkit-backdrop-filter: blur(18px) saturate(140%);
   border-bottom: 1px solid transparent;
@@ -81,7 +97,7 @@ function handleLogout() { auth.logout(); router.push('/login') }
 }
 .app-header.scrolled {
   border-bottom-color: var(--border);
-  background: linear-gradient(180deg, rgba(8,8,12,0.95), rgba(8,8,12,0.85));
+  background: linear-gradient(180deg, var(--header-bg-from-scrolled), var(--header-bg-to-scrolled));
 }
 .header-inner {
   max-width: 1440px; margin: 0 auto;
@@ -157,6 +173,47 @@ function handleLogout() { auth.logout(); router.push('/login') }
   font: 600 10px/16px var(--font-mono);
   text-align: center;
   box-shadow: 0 0 0 2px var(--bg), 0 0 14px -2px var(--accent-glow);
+}
+
+/* Theme toggle — brand-style icon swap */
+.theme-toggle {
+  position: relative;
+  overflow: hidden;
+}
+.theme-toggle::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at center, var(--accent-haze), transparent 70%);
+  opacity: 0;
+  transition: opacity .25s ease;
+  pointer-events: none;
+}
+.theme-toggle:hover::before { opacity: 1; }
+.theme-toggle .theme-icon {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%) rotate(0deg) scale(1);
+  transition: transform .45s cubic-bezier(.5,.1,.3,1.4), opacity .25s ease;
+}
+.theme-toggle .theme-icon.sun {
+  opacity: 1;
+  color: var(--accent);
+}
+.theme-toggle .theme-icon.moon {
+  opacity: 0;
+  color: var(--text);
+  transform: translate(-50%, -50%) rotate(-90deg) scale(0.5);
+}
+.theme-toggle.is-dark .theme-icon.sun {
+  opacity: 0;
+  transform: translate(-50%, -50%) rotate(90deg) scale(0.5);
+}
+.theme-toggle.is-dark .theme-icon.moon {
+  opacity: 1;
+  color: var(--accent-soft);
+  transform: translate(-50%, -50%) rotate(0deg) scale(1);
 }
 
 .login-link {

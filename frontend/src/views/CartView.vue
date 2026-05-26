@@ -89,7 +89,9 @@
           <span class="arrow">→</span>
         </button>
         <p v-if="!auth.isLoggedIn" class="login-hint">
-          <RouterLink to="/login">Войдите</RouterLink>, чтобы оформить заказ
+          <RouterLink to="/login">Войдите</RouterLink>
+          или <RouterLink to="/register" class="register-link">зарегистрируйтесь</RouterLink>,
+          чтобы оформить заказ
         </p>
       </aside>
     </div>

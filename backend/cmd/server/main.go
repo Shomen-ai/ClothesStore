@@ -37,6 +37,7 @@ func main() {
 	orderRepo    := repository.NewOrderRepo(database)
 	wishlistRepo := repository.NewWishlistRepo(database)
 	statsRepo    := repository.NewStatsRepo(database)
+	reportsRepo  := repository.NewReportsRepo(database)
 
 	// Services
 	authSvc   := service.NewAuthService(userRepo, cfg.JWTSecret)
@@ -53,6 +54,7 @@ func main() {
 	adminOrderH   := handler.NewAdminOrderHandler(orderRepo)
 	adminPromoH   := handler.NewAdminPromoHandler(promoRepo)
 	adminStatsH   := handler.NewAdminStatsHandler(statsRepo)
+	adminReportH  := handler.NewAdminReportHandler(reportsRepo)
 
 	r := gin.Default()
 	r.Use(cors.New(cors.Config{
@@ -113,6 +115,7 @@ func main() {
 		admin.GET("/stats/revenue", adminStatsH.Revenue)
 		admin.GET("/stats/orders", adminStatsH.Orders)
 		admin.GET("/stats/promo-codes", adminStatsH.Promos)
+		admin.GET("/reports/excel", adminReportH.Excel)
 	}
 
 	log.Printf("Listening on :%s", cfg.Port)

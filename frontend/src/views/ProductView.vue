@@ -210,7 +210,7 @@ function formatPrice(p) {
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--sale-soft);
-  background: rgba(8,8,12,0.7);
+  background: var(--bg-overlay);
   border: 1px solid var(--sale);
   backdrop-filter: blur(8px);
   box-shadow: 0 0 20px -4px var(--sale-glow);
