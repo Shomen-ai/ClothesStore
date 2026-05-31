@@ -112,6 +112,7 @@ func main() {
 
 		protected := api.Group("", middleware.AuthRequired(cfg.JWTSecret))
 		protected.POST("/orders", orderH.Create)
+		protected.POST("/orders/:id/confirm-payment", orderH.ConfirmPayment)
 		protected.POST("/promo/validate", orderH.ValidatePromo)
 		protected.GET("/products/:id/reviews/me", reviewH.MyForProduct)
 		protected.POST("/products/:id/reviews", reviewH.Create)

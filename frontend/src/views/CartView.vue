@@ -145,13 +145,15 @@ async function applyPromo() {
 async function placeOrder() {
   ordering.value = true
   try {
-    await createOrder({
+    const { data } = await createOrder({
       address_id: selectedAddressID.value,
       promo_code: cart.promoCode || undefined,
       items: cart.items.map(i => ({ product_size_id: i.product_size_id, quantity: i.quantity }))
     })
     cart.clear()
-    router.push('/checkout-success')
+    // The order is created with status 'pending' (awaiting payment); the
+    // payment page takes it through the stub flow to 'confirmed'.
+    router.push(`/payment/${data.id}`)
   } catch (e) {
     console.error(e)
   } finally {

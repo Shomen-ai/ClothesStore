@@ -7,6 +7,7 @@ const routes = [
   { path: '/catalogue/:id', component: () => import('@/views/ProductView.vue') },
   { path: '/cart', component: () => import('@/views/CartView.vue') },
   { path: '/checkout-success', component: () => import('@/views/CheckoutSuccessView.vue') },
+  { path: '/payment/:id', component: () => import('@/views/PaymentView.vue'), meta: { requiresAuth: true } },
   { path: '/login', component: () => import('@/views/LoginView.vue') },
   { path: '/register', component: () => import('@/views/RegisterView.vue') },
   {
