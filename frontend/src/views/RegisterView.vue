@@ -28,9 +28,9 @@
 
           <p v-if="error" class="auth-error">{{ error }}</p>
 
-          <button class="auth-submit" type="submit">
-            <span>Отправить код</span>
-            <span class="arrow">→</span>
+          <button class="auth-submit" type="submit" :disabled="loading">
+            <span>{{ loading ? 'Отправляем код…' : 'Отправить код' }}</span>
+            <span class="arrow" v-if="!loading">→</span>
           </button>
         </form>
       </template>
@@ -67,7 +67,14 @@
 
         <p class="auth-hint">
           <button class="link-btn" type="button" @click="step = 1">← Изменить данные</button>
-          <span class="hint-meta">demo-код: <code>123456</code></span>
+          <button class="link-btn link-btn--resend"
+                  type="button"
+                  :disabled="resendCountdown > 0 || resending"
+                  @click="resendCode">
+            {{ resendCountdown > 0
+                ? `Отправить ещё раз через ${resendCountdown} с`
+                : (resending ? 'Отправка…' : 'Отправить ещё раз') }}
+          </button>
         </p>
       </template>
 
@@ -80,11 +87,10 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth.js'
-
-const VERIFY_CODE = '123456'
+import { registerStart, registerVerify, registerResend } from '@/api/auth.js'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -96,17 +102,52 @@ const code = ref(['', '', '', '', '', ''])
 const codeInputs = []
 const error = ref('')
 const loading = ref(false)
+const resending = ref(false)
+const resendCountdown = ref(0)
+let resendTimer = null
 
 const codeStr = computed(() => code.value.join(''))
 
-function goToCode() {
+function startResendCountdown(seconds = 60) {
+  resendCountdown.value = seconds
+  clearInterval(resendTimer)
+  resendTimer = setInterval(() => {
+    resendCountdown.value -= 1
+    if (resendCountdown.value <= 0) {
+      clearInterval(resendTimer); resendTimer = null
+    }
+  }, 1000)
+}
+
+onUnmounted(() => { if (resendTimer) clearInterval(resendTimer) })
+
+async function goToCode() {
   error.value = ''
   if (form.value.password.length < 6) {
     error.value = 'Пароль должен быть не короче 6 символов'
     return
   }
-  step.value = 2
-  nextTick(() => codeInputs[0]?.focus())
+  if (!form.value.name.trim()) {
+    error.value = 'Укажи имя'
+    return
+  }
+  loading.value = true
+  try {
+    await registerStart({
+      name: form.value.name.trim(),
+      email: form.value.email.trim().toLowerCase(),
+      phone: form.value.phone.trim(),
+      password: form.value.password,
+    })
+    step.value = 2
+    code.value = ['', '', '', '', '', '']
+    startResendCountdown(60)
+    nextTick(() => codeInputs[0]?.focus())
+  } catch (e) {
+    error.value = e.response?.data?.error || 'Не удалось отправить код'
+  } finally {
+    loading.value = false
+  }
 }
 
 function onCodeInput(i, e) {
@@ -133,20 +174,37 @@ function onPaste(e) {
 
 async function confirmCode() {
   error.value = ''
-  if (codeStr.value !== VERIFY_CODE) {
-    error.value = 'Неверный код. Попробуй 123456 (demo).'
+  if (codeStr.value.length !== 6) {
+    error.value = 'Введи 6 цифр'
     return
   }
   loading.value = true
   try {
-    await auth.register(form.value)
+    const { data } = await registerVerify({
+      email: form.value.email.trim().toLowerCase(),
+      code: codeStr.value,
+    })
+    auth.setSession(data)
     const redirect = route.query.redirect
     router.push(redirect || '/account')
   } catch (e) {
     error.value = e.response?.data?.error || 'Не удалось завершить регистрацию'
-    step.value = 1
   } finally {
     loading.value = false
+  }
+}
+
+async function resendCode() {
+  if (resendCountdown.value > 0 || resending.value) return
+  resending.value = true
+  error.value = ''
+  try {
+    await registerResend(form.value.email.trim().toLowerCase())
+    startResendCountdown(60)
+  } catch (e) {
+    error.value = e.response?.data?.error || 'Не удалось отправить код'
+  } finally {
+    resending.value = false
   }
 }
 </script>

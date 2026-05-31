@@ -31,15 +31,45 @@ func (s *AuthService) Register(email, password, name, phone string) (*model.User
 	if err != nil {
 		return nil, nil, err
 	}
-	u := &model.User{Email: email, PasswordHash: string(hash), Name: name, Phone: phone, Role: "customer"}
+	return s.RegisterFromPrehashed(email, string(hash), name, phone)
+}
+
+// RegisterFromPrehashed creates a user given an already-bcrypted password.
+// Used by the email-verified sign-up path, where the hash lives on the pending
+// row from the moment register/start hit.
+func (s *AuthService) RegisterFromPrehashed(email, passwordHash, name, phone string) (*model.User, *TokenPair, error) {
+	u := &model.User{Email: email, PasswordHash: passwordHash, Name: name, Phone: phone, Role: "customer"}
 	if err := s.userRepo.Create(u); err != nil {
-		if strings.Contains(err.Error(), "ORA-00001") {
+		if isUniqueEmailErr(err) {
 			return nil, nil, ErrEmailTaken
 		}
 		return nil, nil, err
 	}
 	pair, err := s.generatePair(u.ID, u.Role)
 	return u, pair, err
+}
+
+// EmailTaken is a cheap pre-check so register/start can return 409 before we
+// generate a code, hash a password and burn an SMTP call.
+func (s *AuthService) EmailTaken(email string) (bool, error) {
+	_, err := s.userRepo.GetByEmail(email)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func isUniqueEmailErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "23505") ||
+		strings.Contains(s, "duplicate key") ||
+		strings.Contains(s, "ORA-00001")
 }
 
 func (s *AuthService) Login(email, password string) (*model.User, *TokenPair, error) {

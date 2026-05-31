@@ -3,9 +3,11 @@ package main
 import (
 	"log"
 	"os"
+	"time"
 	"clothes-store/internal/config"
 	"clothes-store/internal/db"
 	"clothes-store/internal/handler"
+	"clothes-store/internal/mailer"
 	"clothes-store/internal/middleware"
 	"clothes-store/internal/repository"
 	"clothes-store/internal/service"
@@ -39,6 +41,31 @@ func main() {
 	statsRepo    := repository.NewStatsRepo(database)
 	reportsRepo  := repository.NewReportsRepo(database)
 	reviewRepo   := repository.NewReviewRepo(database)
+	pendingRepo  := repository.NewPendingRegistrationRepo(database)
+
+	// Mailer — falls back to logging the code when SMTP_HOST is empty,
+	// which keeps registration usable in dev without external services.
+	var mail mailer.Mailer
+	if cfg.SMTPHost != "" {
+		log.Printf("mailer: SMTP %s:%s", cfg.SMTPHost, cfg.SMTPPort)
+		mail = mailer.NewSMTPMailer(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom)
+	} else {
+		log.Printf("mailer: SMTP_HOST not set — using LogMailer (codes go to stdout)")
+		mail = mailer.NewLogMailer()
+	}
+
+	// Periodic cleanup of stale pending_registrations.
+	go func() {
+		t := time.NewTicker(10 * time.Minute)
+		defer t.Stop()
+		for range t.C {
+			if n, err := pendingRepo.CleanExpired(1 * time.Hour); err != nil {
+				log.Printf("pending cleanup: %v", err)
+			} else if n > 0 {
+				log.Printf("pending cleanup: removed %d row(s)", n)
+			}
+		}
+	}()
 
 	// Services
 	authSvc   := service.NewAuthService(userRepo, cfg.JWTSecret)
@@ -46,7 +73,7 @@ func main() {
 	uploadSvc := service.NewUploadService(cfg.UploadsDir)
 
 	// Handlers
-	authH         := handler.NewAuthHandler(authSvc)
+	authH         := handler.NewAuthHandler(authSvc, pendingRepo, mail)
 	catalogueH    := handler.NewCatalogueHandler(productRepo)
 	orderH        := handler.NewOrderHandler(orderSvc, promoRepo, orderRepo)
 	wishlistH     := handler.NewWishlistHandler(wishlistRepo)
@@ -71,9 +98,11 @@ func main() {
 	api := r.Group("/api")
 	{
 		auth := api.Group("/auth")
-		auth.POST("/register", authH.Register)
 		auth.POST("/login", authH.Login)
 		auth.POST("/refresh", authH.Refresh)
+		auth.POST("/register/start", authH.RegisterStart)
+		auth.POST("/register/verify", authH.RegisterVerify)
+		auth.POST("/register/resend", authH.RegisterResend)
 
 		api.GET("/categories", catalogueH.GetCategories)
 		api.GET("/products/featured", catalogueH.GetFeatured)
