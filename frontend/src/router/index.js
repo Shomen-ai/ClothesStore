@@ -30,6 +30,7 @@ const routes = [
       { path: 'products', component: () => import('@/views/admin/AdminProductsView.vue') },
       { path: 'orders', component: () => import('@/views/admin/AdminOrdersView.vue') },
       { path: 'promo-codes', component: () => import('@/views/admin/AdminPromoView.vue') },
+      { path: 'reviews', component: () => import('@/views/admin/ReviewsView.vue') },
     ]
   }
 ]

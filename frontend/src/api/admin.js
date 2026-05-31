@@ -26,3 +26,7 @@ export const getOrderStats = (period) => api.get('/admin/stats/orders', { params
 export const getPromoStats = (period) => api.get('/admin/stats/promo-codes', { params: { period } })
 // Reports
 export const downloadExcelReport = () => api.get('/admin/reports/excel', { responseType: 'blob' })
+// Reviews
+export const adminListReviews    = (hidden) => api.get('/admin/reviews', { params: hidden == null ? {} : { hidden } })
+export const adminSetReviewHidden = (id, isHidden) => api.patch(`/admin/reviews/${id}`, { is_hidden: isHidden })
+export const adminDeleteReview   = (id) => api.delete(`/admin/reviews/${id}`)

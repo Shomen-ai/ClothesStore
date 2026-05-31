@@ -28,6 +28,11 @@
           <span class="nav-num">04</span>
           <span class="nav-label">Промокоды</span>
         </RouterLink>
+        <RouterLink to="/admin/reviews" active-class="active" class="nav-item">
+          <span class="nav-bar"></span>
+          <span class="nav-num">05</span>
+          <span class="nav-label">Отзывы</span>
+        </RouterLink>
       </nav>
 
       <div class="sidebar-footer">

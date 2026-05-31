@@ -81,6 +81,8 @@
         </ul>
       </div>
     </div>
+
+    <ReviewsSection :product-id="product.id" />
   </div>
 
   <div v-else class="page-loading">
@@ -96,6 +98,7 @@ import { getProduct, getCategories } from '@/api/catalogue.js'
 import { useCartStore } from '@/stores/cart.js'
 import { useWishlistStore } from '@/stores/wishlist.js'
 import { ElMessage } from 'element-plus'
+import ReviewsSection from '@/components/product/ReviewsSection.vue'
 
 const route = useRoute()
 const cart = useCartStore()

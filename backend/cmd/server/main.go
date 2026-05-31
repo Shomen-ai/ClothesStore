@@ -38,6 +38,7 @@ func main() {
 	wishlistRepo := repository.NewWishlistRepo(database)
 	statsRepo    := repository.NewStatsRepo(database)
 	reportsRepo  := repository.NewReportsRepo(database)
+	reviewRepo   := repository.NewReviewRepo(database)
 
 	// Services
 	authSvc   := service.NewAuthService(userRepo, cfg.JWTSecret)
@@ -55,6 +56,8 @@ func main() {
 	adminPromoH   := handler.NewAdminPromoHandler(promoRepo)
 	adminStatsH   := handler.NewAdminStatsHandler(statsRepo)
 	adminReportH  := handler.NewAdminReportHandler(reportsRepo)
+	reviewH       := handler.NewReviewHandler(reviewRepo)
+	adminReviewH  := handler.NewAdminReviewHandler(reviewRepo)
 
 	r := gin.Default()
 	r.Use(cors.New(cors.Config{
@@ -76,10 +79,15 @@ func main() {
 		api.GET("/products/featured", catalogueH.GetFeatured)
 		api.GET("/products", catalogueH.ListProducts)
 		api.GET("/products/:id", catalogueH.GetProduct)
+		api.GET("/products/:id/reviews", reviewH.ListForProduct)
 
 		protected := api.Group("", middleware.AuthRequired(cfg.JWTSecret))
 		protected.POST("/orders", orderH.Create)
 		protected.POST("/promo/validate", orderH.ValidatePromo)
+		protected.GET("/products/:id/reviews/me", reviewH.MyForProduct)
+		protected.POST("/products/:id/reviews", reviewH.Create)
+		protected.PUT("/products/:id/reviews/:rid", reviewH.Update)
+		protected.DELETE("/products/:id/reviews/:rid", reviewH.Delete)
 
 		user := api.Group("/user", middleware.AuthRequired(cfg.JWTSecret))
 		user.GET("/orders", orderH.GetUserOrders)
@@ -116,6 +124,9 @@ func main() {
 		admin.GET("/stats/orders", adminStatsH.Orders)
 		admin.GET("/stats/promo-codes", adminStatsH.Promos)
 		admin.GET("/reports/excel", adminReportH.Excel)
+		admin.GET("/reviews", adminReviewH.List)
+		admin.PATCH("/reviews/:id", adminReviewH.Patch)
+		admin.DELETE("/reviews/:id", adminReviewH.Delete)
 	}
 
 	log.Printf("Listening on :%s", cfg.Port)
