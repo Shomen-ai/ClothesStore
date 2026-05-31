@@ -30,16 +30,23 @@ type PromoStat struct {
 	Activations int    `json:"activations"`
 }
 
+// periodCondition is appended to dashboard stats queries. The upper bound is
+// load-bearing: the demo seed extends orders into the future so the chart
+// stays populated as time moves; without clamping at NOW() (or end-of-today
+// for the "day" period) those future orders bleed into every bucket and the
+// chart shows revenue for days that haven't happened yet.
 func (r *StatsRepo) periodCondition(period string) string {
 	switch period {
 	case "day":
-		return "AND o.created_at >= CURRENT_DATE"
+		return "AND o.created_at >= CURRENT_DATE AND o.created_at < CURRENT_DATE + INTERVAL '1 day'"
 	case "week":
-		return "AND o.created_at >= CURRENT_DATE - INTERVAL '7 days'"
+		return "AND o.created_at >= CURRENT_DATE - INTERVAL '7 days' AND o.created_at <= NOW()"
 	case "month":
-		return "AND o.created_at >= date_trunc('month', CURRENT_DATE)"
+		return "AND o.created_at >= date_trunc('month', CURRENT_DATE) AND o.created_at <= NOW()"
 	case "quarter":
-		return "AND o.created_at >= date_trunc('quarter', CURRENT_DATE)"
+		return "AND o.created_at >= date_trunc('quarter', CURRENT_DATE) AND o.created_at <= NOW()"
+	case "all":
+		return "AND o.created_at <= NOW()"
 	}
 	return ""
 }

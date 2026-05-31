@@ -69,14 +69,14 @@ func (r *ReportsRepo) queryRows(q string, args ...any) ([][]any, error) {
 func (r *ReportsRepo) Summary() (ReportSheet, error) {
 	rows, err := r.queryRows(`
 		SELECT
-			(SELECT COUNT(*) FROM orders)                                              AS total_orders,
-			(SELECT COUNT(*) FROM orders WHERE status='delivered')                     AS delivered,
-			(SELECT COUNT(*) FROM orders WHERE status='cancelled')                     AS cancelled,
-			(SELECT COALESCE(SUM(total_price),0) FROM orders WHERE status!='cancelled') AS gross_revenue,
-			(SELECT COALESCE(SUM(discount_amount),0) FROM orders WHERE status!='cancelled') AS total_discount,
-			(SELECT ROUND(AVG(total_price)::numeric, 2) FROM orders WHERE status!='cancelled') AS aov,
+			(SELECT COUNT(*) FROM orders WHERE created_at <= NOW())                                            AS total_orders,
+			(SELECT COUNT(*) FROM orders WHERE status='delivered' AND created_at <= NOW())                     AS delivered,
+			(SELECT COUNT(*) FROM orders WHERE status='cancelled' AND created_at <= NOW())                     AS cancelled,
+			(SELECT COALESCE(SUM(total_price),0)     FROM orders WHERE status!='cancelled' AND created_at <= NOW()) AS gross_revenue,
+			(SELECT COALESCE(SUM(discount_amount),0) FROM orders WHERE status!='cancelled' AND created_at <= NOW()) AS total_discount,
+			(SELECT ROUND(AVG(total_price)::numeric, 2) FROM orders WHERE status!='cancelled' AND created_at <= NOW()) AS aov,
 			(SELECT COUNT(*) FROM users WHERE role='customer')                          AS customers,
-			(SELECT COUNT(DISTINCT user_id) FROM orders)                               AS buyers,
+			(SELECT COUNT(DISTINCT user_id) FROM orders WHERE created_at <= NOW())     AS buyers,
 			(SELECT COUNT(*) FROM products WHERE is_active=true)                       AS active_products,
 			(SELECT COUNT(*) FROM products WHERE is_on_sale=true AND is_active=true)   AS sale_products
 	`)
@@ -116,6 +116,7 @@ func (r *ReportsRepo) RevenueDaily() (ReportSheet, error) {
 		FROM orders o
 		WHERE o.status != 'cancelled'
 		  AND o.created_at >= CURRENT_DATE - INTERVAL '90 days'
+		  AND o.created_at <= NOW()
 		GROUP BY o.created_at::date
 		ORDER BY o.created_at::date
 	`)
@@ -142,6 +143,7 @@ func (r *ReportsRepo) RevenueByCategory() (ReportSheet, error) {
 		JOIN products p  ON p.id  = oi.product_id
 		JOIN categories c ON c.id = p.category_id
 		WHERE o.status != 'cancelled'
+		  AND o.created_at <= NOW()
 		GROUP BY c.name
 		ORDER BY revenue DESC NULLS LAST
 	`)
@@ -167,6 +169,7 @@ func (r *ReportsRepo) RevenueByCity() (ReportSheet, error) {
 		FROM orders o
 		JOIN addresses a ON a.id = o.address_id
 		WHERE o.status != 'cancelled'
+		  AND o.created_at <= NOW()
 		GROUP BY a.city
 		ORDER BY revenue DESC NULLS LAST
 	`)
@@ -194,6 +197,7 @@ func (r *ReportsRepo) TopProducts() (ReportSheet, error) {
 		JOIN products p ON p.id = oi.product_id
 		JOIN categories c ON c.id = p.category_id
 		WHERE o.status != 'cancelled'
+		  AND o.created_at <= NOW()
 		GROUP BY p.id, p.name, c.name
 		ORDER BY revenue DESC NULLS LAST
 		LIMIT 30
@@ -225,6 +229,7 @@ func (r *ReportsRepo) DeadStock() (ReportSheet, error) {
 		    JOIN orders o ON o.id = oi.order_id
 		    WHERE oi.product_id = p.id
 		      AND o.created_at >= CURRENT_DATE - INTERVAL '60 days'
+		      AND o.created_at <= NOW()
 		      AND o.status != 'cancelled'
 		  )
 		ORDER BY p.created_at ASC
@@ -254,7 +259,7 @@ func (r *ReportsRepo) DeadStock() (ReportSheet, error) {
 func (r *ReportsRepo) OrderFunnel() (ReportSheet, error) {
 	rows, err := r.queryRows(`
 		WITH s AS (
-		  SELECT status, COUNT(*) AS cnt FROM orders GROUP BY status
+		  SELECT status, COUNT(*) AS cnt FROM orders WHERE created_at <= NOW() GROUP BY status
 		), tot AS (SELECT SUM(cnt) AS t FROM s)
 		SELECT
 		  CASE status
@@ -294,6 +299,7 @@ func (r *ReportsRepo) CancellationByCategory() (ReportSheet, error) {
 		JOIN order_items oi ON oi.order_id = o.id
 		JOIN products p     ON p.id = oi.product_id
 		JOIN categories c   ON c.id = p.category_id
+		WHERE o.created_at <= NOW()
 		GROUP BY c.name
 		ORDER BY cancel_rate DESC NULLS LAST
 	`)
@@ -321,7 +327,7 @@ func (r *ReportsRepo) PromoROI() (ReportSheet, error) {
 		            THEN ROUND(SUM(o.total_price)::numeric / SUM(o.discount_amount), 2)
 		            ELSE NULL END                                       AS roi
 		FROM promo_codes pc
-		LEFT JOIN orders o ON o.promo_code_id = pc.id AND o.status != 'cancelled'
+		LEFT JOIN orders o ON o.promo_code_id = pc.id AND o.status != 'cancelled' AND o.created_at <= NOW()
 		GROUP BY pc.id, pc.code, pc.discount_type, pc.discount_value
 		ORDER BY revenue_generated DESC NULLS LAST
 	`)
@@ -346,7 +352,7 @@ func (r *ReportsRepo) TopCustomers() (ReportSheet, error) {
 		       ROUND(AVG(o.total_price)::numeric, 2)            AS aov,
 		       TO_CHAR(MAX(o.created_at)::date, 'DD.MM.YYYY')   AS last_order
 		FROM users u
-		JOIN orders o ON o.user_id = u.id AND o.status != 'cancelled'
+		JOIN orders o ON o.user_id = u.id AND o.status != 'cancelled' AND o.created_at <= NOW()
 		WHERE u.role = 'customer'
 		GROUP BY u.id, u.email, u.name
 		ORDER BY spent DESC NULLS LAST
@@ -372,7 +378,7 @@ func (r *ReportsRepo) RFM() (ReportSheet, error) {
 		         COUNT(o.id)                              AS frequency,
 		         SUM(o.total_price)                       AS monetary
 		  FROM users u
-		  JOIN orders o ON o.user_id = u.id AND o.status != 'cancelled'
+		  JOIN orders o ON o.user_id = u.id AND o.status != 'cancelled' AND o.created_at <= NOW()
 		  WHERE u.role = 'customer'
 		  GROUP BY u.id, u.email
 		)
@@ -410,7 +416,7 @@ func (r *ReportsRepo) Geo() (ReportSheet, error) {
 		       ROUND(COALESCE(SUM(o.total_price),0)::numeric, 2) AS revenue
 		FROM addresses a
 		JOIN users u   ON u.id = a.user_id AND u.role = 'customer'
-		LEFT JOIN orders o ON o.address_id = a.id AND o.status != 'cancelled'
+		LEFT JOIN orders o ON o.address_id = a.id AND o.status != 'cancelled' AND o.created_at <= NOW()
 		GROUP BY a.city
 		ORDER BY revenue DESC NULLS LAST
 	`)
@@ -441,7 +447,7 @@ func (r *ReportsRepo) TopWishlisted() (ReportSheet, error) {
 		LEFT JOIN LATERAL (
 		  SELECT SUM(oi.quantity)::int AS units
 		  FROM order_items oi JOIN orders o ON o.id = oi.order_id
-		  WHERE oi.product_id = p.id AND o.status != 'cancelled'
+		  WHERE oi.product_id = p.id AND o.status != 'cancelled' AND o.created_at <= NOW()
 		) s ON true
 		GROUP BY p.id, p.name, c.name, s.units
 		ORDER BY wishes DESC NULLS LAST
@@ -470,6 +476,7 @@ func (r *ReportsRepo) SaleVsRegular() (ReportSheet, error) {
 		  JOIN orders   o ON o.id = oi.order_id
 		  JOIN products p ON p.id = oi.product_id
 		  WHERE o.status != 'cancelled'
+		    AND o.created_at <= NOW()
 		  GROUP BY p.is_on_sale
 		)
 		SELECT CASE WHEN is_on_sale THEN 'Распродажа' ELSE 'Обычные' END AS kind,
@@ -535,9 +542,9 @@ func (r *ReportsRepo) KPIs() (SummaryKPIs, error) {
 	var k SummaryKPIs
 	err := r.db.QueryRow(`
 		SELECT
-		  COALESCE((SELECT SUM(total_price)             FROM orders WHERE status!='cancelled'), 0)::float8,
-		  COALESCE((SELECT COUNT(*)                     FROM orders), 0),
-		  COALESCE((SELECT AVG(total_price)::numeric    FROM orders WHERE status!='cancelled'), 0)::float8,
+		  COALESCE((SELECT SUM(total_price)             FROM orders WHERE status!='cancelled' AND created_at <= NOW()), 0)::float8,
+		  COALESCE((SELECT COUNT(*)                     FROM orders WHERE created_at <= NOW()), 0),
+		  COALESCE((SELECT AVG(total_price)::numeric    FROM orders WHERE status!='cancelled' AND created_at <= NOW()), 0)::float8,
 		  COALESCE((SELECT COUNT(*) FROM users WHERE role='customer'), 0),
 		  COALESCE((SELECT COUNT(*) FROM products WHERE is_active=true), 0),
 		  COALESCE((
