@@ -22,6 +22,12 @@ services:
       JWT_SECRET: ${JWT_SECRET:-changeme-in-production}
       PORT: 8080
       UPLOADS_DIR: /uploads
+      # SMTP — empty SMTP_HOST keeps the LogMailer fallback active.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
     volumes:
       - uploads:/uploads
     ports:
