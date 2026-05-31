@@ -5,18 +5,33 @@ import (
 )
 
 // ReportsRepo aggregates all read-only queries used by the Excel report.
-// Every method returns rows as [][]any so the handler can write them
-// straight to xlsx without per-report mapping ceremony.
+// Each method returns a ReportSheet whose ColTypes drive number formatting
+// and alignment in the handler, so the same struct shape works for tables
+// of money, percentages, counts and dates without per-report ceremony.
 type ReportsRepo struct{ db *sql.DB }
 
 func NewReportsRepo(db *sql.DB) *ReportsRepo { return &ReportsRepo{db: db} }
 
+// ColType tells the handler how a value should be formatted in Excel.
+type ColType int
+
+const (
+	ColText ColType = iota
+	ColInt
+	ColMoney   // numeric, "# ##0 ₽"
+	ColPercent // value already in percent units, "0.0\"%\""
+	ColDate    // already-formatted date string; right-aligned, mono
+)
+
 type ReportSheet struct {
-	Name    string
-	Headers []string
-	Rows    [][]any
+	Name       string
+	Headers    []string
+	ColTypes   []ColType
+	Rows       [][]any
+	TotalsCols []int // 0-indexed columns to SUM in a final "Итого" row
 }
 
+// queryRows runs a query and returns rows as [][]any, normalising []byte to string.
 func (r *ReportsRepo) queryRows(q string, args ...any) ([][]any, error) {
 	rows, err := r.db.Query(q, args...)
 	if err != nil {
@@ -37,7 +52,6 @@ func (r *ReportsRepo) queryRows(q string, args ...any) ([][]any, error) {
 		if err := rows.Scan(ptrs...); err != nil {
 			return nil, err
 		}
-		// normalize []byte (pq numeric/text) to string
 		for i, v := range raw {
 			if b, ok := v.([]byte); ok {
 				raw[i] = string(b)
@@ -50,6 +64,8 @@ func (r *ReportsRepo) queryRows(q string, args ...any) ([][]any, error) {
 
 // ────────────────────────────────────────────────────────────────────
 
+// Summary is a flat key/value list; rendering as two text columns keeps it
+// human-readable even with mixed numeric types in the value column.
 func (r *ReportsRepo) Summary() (ReportSheet, error) {
 	rows, err := r.queryRows(`
 		SELECT
@@ -83,7 +99,12 @@ func (r *ReportsRepo) Summary() (ReportSheet, error) {
 		{"Активных товаров", r0[8]},
 		{"На распродаже", r0[9]},
 	}
-	return ReportSheet{Name: "Сводка", Headers: []string{"Показатель", "Значение"}, Rows: out}, nil
+	return ReportSheet{
+		Name:     "Сводка",
+		Headers:  []string{"Показатель", "Значение"},
+		ColTypes: []ColType{ColText, ColText},
+		Rows:     out,
+	}, nil
 }
 
 func (r *ReportsRepo) RevenueDaily() (ReportSheet, error) {
@@ -101,7 +122,13 @@ func (r *ReportsRepo) RevenueDaily() (ReportSheet, error) {
 	if err != nil {
 		return ReportSheet{}, err
 	}
-	return ReportSheet{Name: "Выручка по дням", Headers: []string{"Дата", "Заказов", "Выручка ₽", "Средний чек ₽"}, Rows: rows}, nil
+	return ReportSheet{
+		Name:       "Выручка по дням",
+		Headers:    []string{"Дата", "Заказов", "Выручка ₽", "Средний чек ₽"},
+		ColTypes:   []ColType{ColDate, ColInt, ColMoney, ColMoney},
+		Rows:       rows,
+		TotalsCols: []int{1, 2},
+	}, nil
 }
 
 func (r *ReportsRepo) RevenueByCategory() (ReportSheet, error) {
@@ -121,7 +148,13 @@ func (r *ReportsRepo) RevenueByCategory() (ReportSheet, error) {
 	if err != nil {
 		return ReportSheet{}, err
 	}
-	return ReportSheet{Name: "Выручка по категориям", Headers: []string{"Категория", "Заказов", "Шт.", "Выручка ₽"}, Rows: rows}, nil
+	return ReportSheet{
+		Name:       "Выручка по категориям",
+		Headers:    []string{"Категория", "Заказов", "Шт.", "Выручка ₽"},
+		ColTypes:   []ColType{ColText, ColInt, ColInt, ColMoney},
+		Rows:       rows,
+		TotalsCols: []int{1, 2, 3},
+	}, nil
 }
 
 func (r *ReportsRepo) RevenueByCity() (ReportSheet, error) {
@@ -140,7 +173,13 @@ func (r *ReportsRepo) RevenueByCity() (ReportSheet, error) {
 	if err != nil {
 		return ReportSheet{}, err
 	}
-	return ReportSheet{Name: "Выручка по городам", Headers: []string{"Город", "Заказов", "Выручка ₽", "Средний чек ₽", "Клиентов"}, Rows: rows}, nil
+	return ReportSheet{
+		Name:       "Выручка по городам",
+		Headers:    []string{"Город", "Заказов", "Выручка ₽", "Средний чек ₽", "Клиентов"},
+		ColTypes:   []ColType{ColText, ColInt, ColMoney, ColMoney, ColInt},
+		Rows:       rows,
+		TotalsCols: []int{1, 2, 4},
+	}, nil
 }
 
 func (r *ReportsRepo) TopProducts() (ReportSheet, error) {
@@ -162,7 +201,13 @@ func (r *ReportsRepo) TopProducts() (ReportSheet, error) {
 	if err != nil {
 		return ReportSheet{}, err
 	}
-	return ReportSheet{Name: "Топ-30 товаров", Headers: []string{"Товар", "Категория", "Шт.", "Выручка ₽", "Средняя цена ₽"}, Rows: rows}, nil
+	return ReportSheet{
+		Name:       "Топ-30 товаров",
+		Headers:    []string{"Товар", "Категория", "Шт.", "Выручка ₽", "Средняя цена ₽"},
+		ColTypes:   []ColType{ColText, ColText, ColInt, ColMoney, ColMoney},
+		Rows:       rows,
+		TotalsCols: []int{2, 3},
+	}, nil
 }
 
 func (r *ReportsRepo) DeadStock() (ReportSheet, error) {
@@ -171,7 +216,7 @@ func (r *ReportsRepo) DeadStock() (ReportSheet, error) {
 		       c.name                       AS category,
 		       p.price,
 		       p.is_on_sale,
-		       p.created_at::date           AS created
+		       TO_CHAR(p.created_at::date, 'DD.MM.YYYY') AS created
 		FROM products p
 		LEFT JOIN categories c ON c.id = p.category_id
 		WHERE p.is_active = true
@@ -188,7 +233,22 @@ func (r *ReportsRepo) DeadStock() (ReportSheet, error) {
 	if err != nil {
 		return ReportSheet{}, err
 	}
-	return ReportSheet{Name: "Мёртвый сток (60 дней)", Headers: []string{"Товар", "Категория", "Цена ₽", "На распродаже", "Заведён"}, Rows: rows}, nil
+	// Normalise the boolean column for nicer text rendering.
+	for _, row := range rows {
+		if v, ok := row[3].(bool); ok {
+			if v {
+				row[3] = "да"
+			} else {
+				row[3] = "нет"
+			}
+		}
+	}
+	return ReportSheet{
+		Name:     "Мёртвый сток (60 дней)",
+		Headers:  []string{"Товар", "Категория", "Цена ₽", "На распродаже", "Заведён"},
+		ColTypes: []ColType{ColText, ColText, ColMoney, ColText, ColDate},
+		Rows:     rows,
+	}, nil
 }
 
 func (r *ReportsRepo) OrderFunnel() (ReportSheet, error) {
@@ -213,7 +273,13 @@ func (r *ReportsRepo) OrderFunnel() (ReportSheet, error) {
 	if err != nil {
 		return ReportSheet{}, err
 	}
-	return ReportSheet{Name: "Воронка статусов", Headers: []string{"Статус", "Кол-во", "Доля %"}, Rows: rows}, nil
+	return ReportSheet{
+		Name:       "Воронка статусов",
+		Headers:    []string{"Статус", "Кол-во", "Доля %"},
+		ColTypes:   []ColType{ColText, ColInt, ColPercent},
+		Rows:       rows,
+		TotalsCols: []int{1},
+	}, nil
 }
 
 func (r *ReportsRepo) CancellationByCategory() (ReportSheet, error) {
@@ -234,7 +300,13 @@ func (r *ReportsRepo) CancellationByCategory() (ReportSheet, error) {
 	if err != nil {
 		return ReportSheet{}, err
 	}
-	return ReportSheet{Name: "Отмены по категориям", Headers: []string{"Категория", "Отменено", "Всего", "Доля отмен %"}, Rows: rows}, nil
+	return ReportSheet{
+		Name:       "Отмены по категориям",
+		Headers:    []string{"Категория", "Отменено", "Всего", "Доля отмен %"},
+		ColTypes:   []ColType{ColText, ColInt, ColInt, ColPercent},
+		Rows:       rows,
+		TotalsCols: []int{1, 2},
+	}, nil
 }
 
 func (r *ReportsRepo) PromoROI() (ReportSheet, error) {
@@ -256,7 +328,13 @@ func (r *ReportsRepo) PromoROI() (ReportSheet, error) {
 	if err != nil {
 		return ReportSheet{}, err
 	}
-	return ReportSheet{Name: "ROI промокодов", Headers: []string{"Код", "Тип", "Значение", "Активаций", "Выручка ₽", "Скидка ₽", "ROI ×"}, Rows: rows}, nil
+	return ReportSheet{
+		Name:       "ROI промокодов",
+		Headers:    []string{"Код", "Тип", "Значение", "Активаций", "Выручка ₽", "Скидка ₽", "ROI ×"},
+		ColTypes:   []ColType{ColText, ColText, ColText, ColInt, ColMoney, ColMoney, ColText},
+		Rows:       rows,
+		TotalsCols: []int{3, 4, 5},
+	}, nil
 }
 
 func (r *ReportsRepo) TopCustomers() (ReportSheet, error) {
@@ -266,7 +344,7 @@ func (r *ReportsRepo) TopCustomers() (ReportSheet, error) {
 		       COUNT(o.id)                                      AS orders,
 		       ROUND(SUM(o.total_price)::numeric, 2)            AS spent,
 		       ROUND(AVG(o.total_price)::numeric, 2)            AS aov,
-		       MAX(o.created_at)::date                          AS last_order
+		       TO_CHAR(MAX(o.created_at)::date, 'DD.MM.YYYY')   AS last_order
 		FROM users u
 		JOIN orders o ON o.user_id = u.id AND o.status != 'cancelled'
 		WHERE u.role = 'customer'
@@ -277,7 +355,13 @@ func (r *ReportsRepo) TopCustomers() (ReportSheet, error) {
 	if err != nil {
 		return ReportSheet{}, err
 	}
-	return ReportSheet{Name: "Топ-20 клиентов", Headers: []string{"Email", "Имя", "Заказов", "Потратил ₽", "Средний чек ₽", "Последний заказ"}, Rows: rows}, nil
+	return ReportSheet{
+		Name:       "Топ-20 клиентов",
+		Headers:    []string{"Email", "Имя", "Заказов", "Потратил ₽", "Средний чек ₽", "Последний заказ"},
+		ColTypes:   []ColType{ColText, ColText, ColInt, ColMoney, ColMoney, ColDate},
+		Rows:       rows,
+		TotalsCols: []int{2, 3},
+	}, nil
 }
 
 func (r *ReportsRepo) RFM() (ReportSheet, error) {
@@ -309,7 +393,13 @@ func (r *ReportsRepo) RFM() (ReportSheet, error) {
 	if err != nil {
 		return ReportSheet{}, err
 	}
-	return ReportSheet{Name: "RFM-сегменты", Headers: []string{"Email", "Дней с последнего", "Заказов", "Сумма ₽", "Сегмент"}, Rows: rows}, nil
+	return ReportSheet{
+		Name:       "RFM-сегменты",
+		Headers:    []string{"Email", "Дней с последнего", "Заказов", "Сумма ₽", "Сегмент"},
+		ColTypes:   []ColType{ColText, ColInt, ColInt, ColMoney, ColText},
+		Rows:       rows,
+		TotalsCols: []int{3},
+	}, nil
 }
 
 func (r *ReportsRepo) Geo() (ReportSheet, error) {
@@ -327,7 +417,13 @@ func (r *ReportsRepo) Geo() (ReportSheet, error) {
 	if err != nil {
 		return ReportSheet{}, err
 	}
-	return ReportSheet{Name: "География", Headers: []string{"Город", "Клиентов", "Заказов", "Выручка ₽"}, Rows: rows}, nil
+	return ReportSheet{
+		Name:       "География",
+		Headers:    []string{"Город", "Клиентов", "Заказов", "Выручка ₽"},
+		ColTypes:   []ColType{ColText, ColInt, ColInt, ColMoney},
+		Rows:       rows,
+		TotalsCols: []int{1, 2, 3},
+	}, nil
 }
 
 func (r *ReportsRepo) TopWishlisted() (ReportSheet, error) {
@@ -354,7 +450,13 @@ func (r *ReportsRepo) TopWishlisted() (ReportSheet, error) {
 	if err != nil {
 		return ReportSheet{}, err
 	}
-	return ReportSheet{Name: "Топ wishlist", Headers: []string{"Товар", "Категория", "В избранном", "Куплено шт.", "Конверсия %"}, Rows: rows}, nil
+	return ReportSheet{
+		Name:       "Топ wishlist",
+		Headers:    []string{"Товар", "Категория", "В избранном", "Куплено шт.", "Конверсия %"},
+		ColTypes:   []ColType{ColText, ColText, ColInt, ColInt, ColPercent},
+		Rows:       rows,
+		TotalsCols: []int{2, 3},
+	}, nil
 }
 
 func (r *ReportsRepo) SaleVsRegular() (ReportSheet, error) {
@@ -380,7 +482,13 @@ func (r *ReportsRepo) SaleVsRegular() (ReportSheet, error) {
 	if err != nil {
 		return ReportSheet{}, err
 	}
-	return ReportSheet{Name: "Sale vs обычные", Headers: []string{"Тип", "Шт.", "Выручка ₽", "Средняя цена ₽"}, Rows: rows}, nil
+	return ReportSheet{
+		Name:       "Sale vs обычные",
+		Headers:    []string{"Тип", "Шт.", "Выручка ₽", "Средняя цена ₽"},
+		ColTypes:   []ColType{ColText, ColInt, ColMoney, ColMoney},
+		Rows:       rows,
+		TotalsCols: []int{1, 2},
+	}, nil
 }
 
 // AllSheets returns the ordered list of every report used by the Excel handler.
@@ -410,4 +518,35 @@ func (r *ReportsRepo) AllSheets() ([]ReportSheet, error) {
 		out = append(out, s)
 	}
 	return out, nil
+}
+
+// SummaryKPIs is a flat snapshot used by the Excel "Содержание" cover sheet.
+// Keeping it separate avoids forcing the Summary sheet itself into a mixed-type table.
+type SummaryKPIs struct {
+	TotalRevenue   float64
+	TotalOrders    int
+	AOV            float64
+	Customers      int
+	ActiveProducts int
+	SaleShare      float64 // percent of active products on sale
+}
+
+func (r *ReportsRepo) KPIs() (SummaryKPIs, error) {
+	var k SummaryKPIs
+	err := r.db.QueryRow(`
+		SELECT
+		  COALESCE((SELECT SUM(total_price)             FROM orders WHERE status!='cancelled'), 0)::float8,
+		  COALESCE((SELECT COUNT(*)                     FROM orders), 0),
+		  COALESCE((SELECT AVG(total_price)::numeric    FROM orders WHERE status!='cancelled'), 0)::float8,
+		  COALESCE((SELECT COUNT(*) FROM users WHERE role='customer'), 0),
+		  COALESCE((SELECT COUNT(*) FROM products WHERE is_active=true), 0),
+		  COALESCE((
+		    SELECT ROUND(
+		      100.0 * COUNT(*) FILTER (WHERE is_on_sale=true)
+		      / NULLIF(COUNT(*), 0), 1
+		    )
+		    FROM products WHERE is_active=true
+		  ), 0)::float8
+	`).Scan(&k.TotalRevenue, &k.TotalOrders, &k.AOV, &k.Customers, &k.ActiveProducts, &k.SaleShare)
+	return k, err
 }

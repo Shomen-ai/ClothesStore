@@ -3,6 +3,8 @@ package handler
 import (
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"clothes-store/internal/repository"
@@ -17,8 +19,70 @@ func NewAdminReportHandler(repo *repository.ReportsRepo) *AdminReportHandler {
 	return &AdminReportHandler{repo: repo}
 }
 
+// ── re-exports so this file can refer to repo types without a long path ──
+type (
+	ReportSheet = repository.ReportSheet
+	ColType     = repository.ColType
+)
+
+const (
+	colText    = repository.ColText
+	colInt     = repository.ColInt
+	colMoney   = repository.ColMoney
+	colPercent = repository.ColPercent
+	colDate    = repository.ColDate
+
+	// brand palette
+	cAccent     = "E11900"
+	cAccentDark = "B0140A"
+	cText       = "14141A"
+	cTextSoft   = "6C6C78"
+	cBorder     = "E5E5E5"
+	cZebra      = "F8F4ED"
+	cTotals     = "ECE7DF"
+	cKpiBg      = "FAF6EE"
+	cContentsBg = "F6F3EE"
+
+	// format strings
+	fmtMoney   = `# ##0" ₽"`
+	fmtInt     = `# ##0`
+	fmtPercent = `0.0"%"`
+
+	contentsSheet = "Содержание"
+	chartSheet    = "Выручка по категориям"
+)
+
+type reportStyles struct {
+	// Contents
+	pageTitle      int
+	pageSubtitle   int
+	kpiCardLabel   int
+	kpiCardMoney   int
+	kpiCardInt     int
+	kpiCardPercent int
+	tocHeader      int
+	tocLink        int
+
+	// Sheet chrome
+	sheetTitle    int
+	sheetSubtitle int
+	header        int
+
+	// Per-column body / zebra / totals styles
+	body   map[ColType]int
+	zebra  map[ColType]int
+	totals map[ColType]int
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 func (h *AdminReportHandler) Excel(c *gin.Context) {
 	sheets, err := h.repo.AllSheets()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	kpis, err := h.repo.KPIs()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -27,113 +91,40 @@ func (h *AdminReportHandler) Excel(c *gin.Context) {
 	f := excelize.NewFile()
 	defer f.Close()
 
-	headerStyle, _ := f.NewStyle(&excelize.Style{
-		Font: &excelize.Font{
-			Bold:   true,
-			Size:   11,
-			Color:  "FFFFFF",
-			Family: "Manrope",
-		},
-		Fill: excelize.Fill{Type: "pattern", Color: []string{"E11900"}, Pattern: 1},
-		Alignment: &excelize.Alignment{
-			Horizontal: "left",
-			Vertical:   "center",
-		},
-		Border: []excelize.Border{
-			{Type: "bottom", Color: "B0140A", Style: 1},
-		},
-	})
-	titleStyle, _ := f.NewStyle(&excelize.Style{
-		Font: &excelize.Font{
-			Bold:   true,
-			Size:   16,
-			Color:  "14141A",
-			Family: "Manrope",
-		},
-	})
-	subtitleStyle, _ := f.NewStyle(&excelize.Style{
-		Font: &excelize.Font{
-			Italic: true,
-			Size:   10,
-			Color:  "6C6C78",
-			Family: "Manrope",
-		},
-	})
-	cellStyle, _ := f.NewStyle(&excelize.Style{
-		Font: &excelize.Font{Size: 11, Color: "14141A", Family: "Manrope"},
-		Border: []excelize.Border{
-			{Type: "bottom", Color: "E5E5E5", Style: 1},
-		},
-		Alignment: &excelize.Alignment{Vertical: "center"},
-	})
-
-	// Excelize creates "Sheet1" by default — we'll rename it for the first report.
-	defaultSheet := f.GetSheetName(0)
-	generatedAt := time.Now().Format("02.01.2006 15:04")
-
-	for i, sheet := range sheets {
-		name := truncSheetName(sheet.Name)
-		var sheetIdx int
-		if i == 0 {
-			f.SetSheetName(defaultSheet, name)
-			sheetIdx, _ = f.GetSheetIndex(name)
-		} else {
-			sheetIdx, _ = f.NewSheet(name)
-		}
-
-		// Title + subtitle
-		f.SetCellValue(name, "A1", sheet.Name)
-		f.SetCellStyle(name, "A1", "A1", titleStyle)
-		f.SetCellValue(name, "A2", "Сформировано: "+generatedAt)
-		f.SetCellStyle(name, "A2", "A2", subtitleStyle)
-
-		// Header row at row 4
-		headerRow := 4
-		for col, h := range sheet.Headers {
-			cell, _ := excelize.CoordinatesToCellName(col+1, headerRow)
-			f.SetCellValue(name, cell, h)
-		}
-		startCell, _ := excelize.CoordinatesToCellName(1, headerRow)
-		endCell, _ := excelize.CoordinatesToCellName(len(sheet.Headers), headerRow)
-		f.SetCellStyle(name, startCell, endCell, headerStyle)
-		f.SetRowHeight(name, headerRow, 26)
-
-		// Data rows
-		for r, row := range sheet.Rows {
-			for col, v := range row {
-				cell, _ := excelize.CoordinatesToCellName(col+1, headerRow+1+r)
-				f.SetCellValue(name, cell, v)
-			}
-		}
-		if len(sheet.Rows) > 0 {
-			firstData, _ := excelize.CoordinatesToCellName(1, headerRow+1)
-			lastData, _ := excelize.CoordinatesToCellName(len(sheet.Headers), headerRow+len(sheet.Rows))
-			f.SetCellStyle(name, firstData, lastData, cellStyle)
-		}
-
-		// Column widths
-		for col := range sheet.Headers {
-			colName, _ := excelize.ColumnNumberToName(col + 1)
-			width := maxColWidth(sheet, col)
-			f.SetColWidth(name, colName, colName, width)
-		}
-
-		// Freeze header row
-		f.SetPanes(name, &excelize.Panes{
-			Freeze:      true,
-			Split:       false,
-			XSplit:      0,
-			YSplit:      headerRow,
-			TopLeftCell: "A" + fmt.Sprintf("%d", headerRow+1),
-			ActivePane:  "bottomLeft",
-		})
-
-		_ = sheetIdx
+	styles, err := buildStyles(f)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
+
+	// First sheet → "Содержание".
+	defaultSheet := f.GetSheetName(0)
+	f.SetSheetName(defaultSheet, contentsSheet)
+
+	renderContents(f, kpis, sheets, styles)
+
+	// One sheet per report. Track names because excelize truncates sheet names
+	// to 31 chars and we need the same key for hyperlinks.
+	displayNames := make([]string, len(sheets))
+	for i, s := range sheets {
+		name := truncSheetName(s.Name)
+		displayNames[i] = name
+		if _, err := f.NewSheet(name); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		renderSheet(f, name, s, styles)
+		if strings.HasPrefix(s.Name, chartSheet) {
+			addCategoryChart(f, name, s)
+		}
+	}
+
+	// TOC links now that all sheets exist.
+	renderTOCLinks(f, displayNames, styles)
 
 	f.SetActiveSheet(0)
 
-	fname := fmt.Sprintf("report_%s.xlsx", time.Now().Format("2006-01-02_1504"))
+	fname := fmt.Sprintf("clothesstore-report_%s.xlsx", time.Now().Format("2006-01-02_1504"))
 	c.Header("Content-Description", "File Transfer")
 	c.Header("Content-Disposition", "attachment; filename="+fname)
 	c.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -142,23 +133,466 @@ func (h *AdminReportHandler) Excel(c *gin.Context) {
 	c.Status(http.StatusOK)
 
 	if err := f.Write(c.Writer); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		// Headers are already flushed; just log via Gin.
+		_ = c.Error(err)
+	}
+}
+
+// ─── styles ─────────────────────────────────────────────────────────────────
+
+func buildStyles(f *excelize.File) (*reportStyles, error) {
+	str := func(s string) *string { return &s }
+	s := &reportStyles{
+		body:   map[ColType]int{},
+		zebra:  map[ColType]int{},
+		totals: map[ColType]int{},
+	}
+
+	// Contents — page-level decoration
+	id, err := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{Bold: true, Size: 26, Color: cText, Family: "Manrope"},
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.pageTitle = id
+
+	if id, err = f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{Italic: true, Size: 11, Color: cTextSoft, Family: "Manrope"},
+	}); err != nil {
+		return nil, err
+	}
+	s.pageSubtitle = id
+
+	if id, err = f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Size: 9, Color: cTextSoft, Family: "JetBrains Mono"},
+		Alignment: &excelize.Alignment{Horizontal: "left", Vertical: "center"},
+		Fill:      excelize.Fill{Type: "pattern", Color: []string{cKpiBg}, Pattern: 1},
+		Border: []excelize.Border{
+			{Type: "top", Color: cBorder, Style: 1},
+			{Type: "left", Color: cBorder, Style: 1},
+			{Type: "right", Color: cBorder, Style: 1},
+		},
+	}); err != nil {
+		return nil, err
+	}
+	s.kpiCardLabel = id
+
+	kpiValueStyle := func(numFmt string) (int, error) {
+		return f.NewStyle(&excelize.Style{
+			Font:         &excelize.Font{Bold: true, Size: 22, Color: cText, Family: "Manrope"},
+			Alignment:    &excelize.Alignment{Horizontal: "left", Vertical: "center"},
+			Fill:         excelize.Fill{Type: "pattern", Color: []string{cKpiBg}, Pattern: 1},
+			CustomNumFmt: str(numFmt),
+			Border: []excelize.Border{
+				{Type: "bottom", Color: cBorder, Style: 1},
+				{Type: "left", Color: cBorder, Style: 1},
+				{Type: "right", Color: cBorder, Style: 1},
+			},
+		})
+	}
+	if id, err = kpiValueStyle(fmtMoney); err != nil {
+		return nil, err
+	}
+	s.kpiCardMoney = id
+	if id, err = kpiValueStyle(fmtInt); err != nil {
+		return nil, err
+	}
+	s.kpiCardInt = id
+	if id, err = kpiValueStyle(fmtPercent); err != nil {
+		return nil, err
+	}
+	s.kpiCardPercent = id
+
+	if id, err = f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Bold: true, Size: 11, Color: cTextSoft, Family: "JetBrains Mono"},
+		Alignment: &excelize.Alignment{Horizontal: "left"},
+		Border:    []excelize.Border{{Type: "bottom", Color: cBorder, Style: 1}},
+	}); err != nil {
+		return nil, err
+	}
+	s.tocHeader = id
+
+	if id, err = f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Size: 12, Color: cAccent, Family: "Manrope", Underline: "single"},
+		Alignment: &excelize.Alignment{Horizontal: "left", Vertical: "center"},
+	}); err != nil {
+		return nil, err
+	}
+	s.tocLink = id
+
+	// Sheet chrome
+	if id, err = f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{Bold: true, Size: 16, Color: cText, Family: "Manrope"},
+	}); err != nil {
+		return nil, err
+	}
+	s.sheetTitle = id
+
+	if id, err = f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{Italic: true, Size: 10, Color: cTextSoft, Family: "Manrope"},
+	}); err != nil {
+		return nil, err
+	}
+	s.sheetSubtitle = id
+
+	if id, err = f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Bold: true, Size: 11, Color: "FFFFFF", Family: "Manrope"},
+		Fill:      excelize.Fill{Type: "pattern", Color: []string{cAccent}, Pattern: 1},
+		Alignment: &excelize.Alignment{Horizontal: "left", Vertical: "center"},
+		Border:    []excelize.Border{{Type: "bottom", Color: cAccentDark, Style: 1}},
+	}); err != nil {
+		return nil, err
+	}
+	s.header = id
+
+	// Per-column body / zebra / totals
+	for _, t := range []ColType{colText, colInt, colMoney, colPercent, colDate} {
+		baseFont := &excelize.Font{Size: 11, Color: cText, Family: "Manrope"}
+		mono := &excelize.Font{Size: 11, Color: cText, Family: "JetBrains Mono"}
+		font := baseFont
+		if t == colDate {
+			font = mono
+		}
+		al := &excelize.Alignment{Vertical: "center", Horizontal: alignFor(t)}
+		var numFmt *string
+		switch t {
+		case colMoney:
+			numFmt = str(fmtMoney)
+		case colInt:
+			numFmt = str(fmtInt)
+		case colPercent:
+			numFmt = str(fmtPercent)
+		}
+		bottom := []excelize.Border{{Type: "bottom", Color: cBorder, Style: 1}}
+
+		id1, err := f.NewStyle(&excelize.Style{Font: font, Alignment: al, CustomNumFmt: numFmt, Border: bottom})
+		if err != nil {
+			return nil, err
+		}
+		s.body[t] = id1
+
+		id2, err := f.NewStyle(&excelize.Style{
+			Font: font, Alignment: al, CustomNumFmt: numFmt, Border: bottom,
+			Fill: excelize.Fill{Type: "pattern", Color: []string{cZebra}, Pattern: 1},
+		})
+		if err != nil {
+			return nil, err
+		}
+		s.zebra[t] = id2
+
+		totalsFont := &excelize.Font{Size: 11, Bold: true, Color: cText, Family: "Manrope"}
+		if t == colDate {
+			totalsFont = &excelize.Font{Size: 11, Bold: true, Color: cText, Family: "JetBrains Mono"}
+		}
+		id3, err := f.NewStyle(&excelize.Style{
+			Font:         totalsFont,
+			Alignment:    al,
+			CustomNumFmt: numFmt,
+			Fill:         excelize.Fill{Type: "pattern", Color: []string{cTotals}, Pattern: 1},
+			Border:       []excelize.Border{{Type: "top", Color: cAccent, Style: 1}, {Type: "bottom", Color: cBorder, Style: 1}},
+		})
+		if err != nil {
+			return nil, err
+		}
+		s.totals[t] = id3
+	}
+
+	return s, nil
+}
+
+func alignFor(t ColType) string {
+	switch t {
+	case colMoney, colInt, colPercent:
+		return "right"
+	case colDate:
+		return "center"
+	}
+	return "left"
+}
+
+// ─── Contents sheet ─────────────────────────────────────────────────────────
+
+func renderContents(f *excelize.File, k repository.SummaryKPIs, sheets []ReportSheet, s *reportStyles) {
+	f.SetCellValue(contentsSheet, "A1", "Аналитический отчёт ClothesStore")
+	f.SetCellStyle(contentsSheet, "A1", "A1", s.pageTitle)
+	f.SetRowHeight(contentsSheet, 1, 38)
+
+	f.SetCellValue(contentsSheet, "A2", "Сформировано: "+time.Now().Format("02.01.2006 15:04"))
+	f.SetCellStyle(contentsSheet, "A2", "A2", s.pageSubtitle)
+
+	// KPI grid: 3 columns × 2 rows
+	type kpi struct {
+		label string
+		value any
+		style int
+	}
+	cards := []kpi{
+		{"Валовая выручка", k.TotalRevenue, s.kpiCardMoney},
+		{"Заказов всего", k.TotalOrders, s.kpiCardInt},
+		{"Средний чек (AOV)", k.AOV, s.kpiCardMoney},
+		{"Клиентов", k.Customers, s.kpiCardInt},
+		{"Активных товаров", k.ActiveProducts, s.kpiCardInt},
+		{"Доля распродажи", k.SaleShare, s.kpiCardPercent},
+	}
+
+	// Cards span B..C (col 2..3), D..E (4..5), F..G (6..7), rows 4-5 and 7-8.
+	cardCols := [][2]int{{2, 3}, {4, 5}, {6, 7}}
+	for i, c := range cards {
+		rowGroup := i / 3
+		labelRow := 4 + rowGroup*3
+		valueRow := labelRow + 1
+		colStart := cardCols[i%3][0]
+		colEnd := cardCols[i%3][1]
+
+		startLbl, _ := excelize.CoordinatesToCellName(colStart, labelRow)
+		endLbl, _ := excelize.CoordinatesToCellName(colEnd, labelRow)
+		_ = f.MergeCell(contentsSheet, startLbl, endLbl)
+		f.SetCellValue(contentsSheet, startLbl, "  "+strings.ToUpper(c.label))
+		f.SetCellStyle(contentsSheet, startLbl, endLbl, s.kpiCardLabel)
+		f.SetRowHeight(contentsSheet, labelRow, 20)
+
+		startVal, _ := excelize.CoordinatesToCellName(colStart, valueRow)
+		endVal, _ := excelize.CoordinatesToCellName(colEnd, valueRow)
+		_ = f.MergeCell(contentsSheet, startVal, endVal)
+		f.SetCellValue(contentsSheet, startVal, c.value)
+		f.SetCellStyle(contentsSheet, startVal, endVal, c.style)
+		f.SetRowHeight(contentsSheet, valueRow, 42)
+	}
+
+	// TOC header
+	f.SetCellValue(contentsSheet, "B11", "Содержимое отчёта")
+	f.SetCellStyle(contentsSheet, "B11", "G11", s.tocHeader)
+	f.SetRowHeight(contentsSheet, 11, 26)
+
+	// TOC rows are populated by renderTOCLinks (after sheets are created).
+	for i := range sheets {
+		row := 12 + i
+		idxCell, _ := excelize.CoordinatesToCellName(2, row)
+		f.SetCellValue(contentsSheet, idxCell, fmt.Sprintf("%02d", i+1))
+		f.SetCellStyle(contentsSheet, idxCell, idxCell, s.pageSubtitle)
+		f.SetRowHeight(contentsSheet, row, 22)
+	}
+
+	// Columns and visuals
+	_ = f.SetColWidth(contentsSheet, "A", "A", 2)
+	_ = f.SetColWidth(contentsSheet, "B", "B", 6)
+	_ = f.SetColWidth(contentsSheet, "C", "C", 26)
+	_ = f.SetColWidth(contentsSheet, "D", "D", 6)
+	_ = f.SetColWidth(contentsSheet, "E", "E", 26)
+	_ = f.SetColWidth(contentsSheet, "F", "F", 6)
+	_ = f.SetColWidth(contentsSheet, "G", "G", 26)
+	_ = f.SetSheetView(contentsSheet, 0, &excelize.ViewOptions{ShowGridLines: boolp(false)})
+}
+
+func renderTOCLinks(f *excelize.File, displayNames []string, s *reportStyles) {
+	for i, name := range displayNames {
+		row := 12 + i
+		linkCell, _ := excelize.CoordinatesToCellName(3, row)
+		endCell, _ := excelize.CoordinatesToCellName(7, row)
+		_ = f.MergeCell(contentsSheet, linkCell, endCell)
+		f.SetCellValue(contentsSheet, linkCell, name)
+		f.SetCellStyle(contentsSheet, linkCell, endCell, s.tocLink)
+		display := name
+		_ = f.SetCellHyperLink(contentsSheet, linkCell,
+			fmt.Sprintf("'%s'!A1", name), "Location",
+			excelize.HyperlinkOpts{Display: &display, Tooltip: &display},
+		)
+	}
+}
+
+// ─── Per-report sheet ───────────────────────────────────────────────────────
+
+func renderSheet(f *excelize.File, name string, s ReportSheet, st *reportStyles) {
+	gen := time.Now().Format("02.01.2006 15:04")
+
+	// Title + subtitle
+	f.SetCellValue(name, "A1", s.Name)
+	f.SetCellStyle(name, "A1", "A1", st.sheetTitle)
+	f.SetRowHeight(name, 1, 30)
+	f.SetCellValue(name, "A2", "Сформировано: "+gen)
+	f.SetCellStyle(name, "A2", "A2", st.sheetSubtitle)
+
+	headerRow := 4
+	for col, h := range s.Headers {
+		cell, _ := excelize.CoordinatesToCellName(col+1, headerRow)
+		f.SetCellValue(name, cell, h)
+	}
+	startCell, _ := excelize.CoordinatesToCellName(1, headerRow)
+	endCell, _ := excelize.CoordinatesToCellName(len(s.Headers), headerRow)
+	f.SetCellStyle(name, startCell, endCell, st.header)
+	f.SetRowHeight(name, headerRow, 26)
+
+	// Data rows with zebra striping
+	for r, row := range s.Rows {
+		rowNum := headerRow + 1 + r
+		zebra := r%2 == 1
+		for col, v := range row {
+			cell, _ := excelize.CoordinatesToCellName(col+1, rowNum)
+			t := colTypeAt(s, col)
+			f.SetCellValue(name, cell, cellValue(v, t))
+			if zebra {
+				f.SetCellStyle(name, cell, cell, st.zebra[t])
+			} else {
+				f.SetCellStyle(name, cell, cell, st.body[t])
+			}
+		}
+	}
+
+	// Totals row (SUM formulas) for columns marked in TotalsCols
+	if len(s.TotalsCols) > 0 && len(s.Rows) > 0 {
+		totalsRow := headerRow + 1 + len(s.Rows)
+		// Label "Итого" in the first column
+		labelCell, _ := excelize.CoordinatesToCellName(1, totalsRow)
+		f.SetCellValue(name, labelCell, "Итого")
+		f.SetCellStyle(name, labelCell, labelCell, st.totals[colText])
+
+		dataStart := headerRow + 1
+		dataEnd := headerRow + len(s.Rows)
+
+		totalsSet := map[int]bool{}
+		for _, c := range s.TotalsCols {
+			totalsSet[c] = true
+		}
+
+		for col := 1; col < len(s.Headers); col++ {
+			cell, _ := excelize.CoordinatesToCellName(col+1, totalsRow)
+			t := colTypeAt(s, col)
+			if totalsSet[col] {
+				colName, _ := excelize.ColumnNumberToName(col + 1)
+				formula := fmt.Sprintf("SUM(%s%d:%s%d)", colName, dataStart, colName, dataEnd)
+				_ = f.SetCellFormula(name, cell, formula)
+			}
+			f.SetCellStyle(name, cell, cell, st.totals[t])
+		}
+		f.SetRowHeight(name, totalsRow, 24)
+	}
+
+	// AutoFilter on header
+	_ = f.AutoFilter(name, fmt.Sprintf("%s:%s", startCell, endCell), []excelize.AutoFilterOptions{})
+
+	// Column widths
+	for col := range s.Headers {
+		colName, _ := excelize.ColumnNumberToName(col + 1)
+		_ = f.SetColWidth(name, colName, colName, widthForCol(s, col))
+	}
+
+	// Data bars on Money/Int data columns (skip totals row)
+	if len(s.Rows) > 1 {
+		for col, t := range s.ColTypes {
+			if t != colMoney && t != colInt {
+				continue
+			}
+			colName, _ := excelize.ColumnNumberToName(col + 1)
+			ref := fmt.Sprintf("%s%d:%s%d", colName, headerRow+1, colName, headerRow+len(s.Rows))
+			zero := 0
+			_ = f.SetConditionalFormat(name, ref, []excelize.ConditionalFormatOptions{{
+				Type: "data_bar", Criteria: "=",
+				MinType: "min", MaxType: "max",
+				BarColor: "#" + cAccent,
+				BarOnly:  false,
+				Format:   &zero,
+			}})
+		}
+	}
+
+	// Freeze the title + header rows
+	_ = f.SetPanes(name, &excelize.Panes{
+		Freeze: true, Split: false,
+		XSplit: 0, YSplit: headerRow,
+		TopLeftCell: "A" + fmt.Sprintf("%d", headerRow+1),
+		ActivePane:  "bottomLeft",
+	})
+}
+
+// ─── chart ──────────────────────────────────────────────────────────────────
+
+func addCategoryChart(f *excelize.File, sheet string, s ReportSheet) {
+	if len(s.Rows) == 0 {
 		return
 	}
+	headerRow := 4
+	firstData := headerRow + 1
+	lastData := headerRow + len(s.Rows)
+	revCol, _ := excelize.ColumnNumberToName(len(s.Headers)) // Revenue is last col
+	catCol := "A"
+
+	categories := fmt.Sprintf("'%s'!$%s$%d:$%s$%d", sheet, catCol, firstData, catCol, lastData)
+	values := fmt.Sprintf("'%s'!$%s$%d:$%s$%d", sheet, revCol, firstData, revCol, lastData)
+	nameRef := fmt.Sprintf("'%s'!$%s$%d", sheet, revCol, headerRow)
+
+	anchor, _ := excelize.CoordinatesToCellName(len(s.Headers)+2, headerRow)
+	_ = f.AddChart(sheet, anchor, &excelize.Chart{
+		Type: excelize.Col,
+		Series: []excelize.ChartSeries{{
+			Name:       nameRef,
+			Categories: categories,
+			Values:     values,
+			Fill:       excelize.Fill{Type: "pattern", Color: []string{"#" + cAccent}, Pattern: 1},
+		}},
+		Title:      []excelize.RichTextRun{{Text: "Выручка по категориям, ₽"}},
+		Legend:     excelize.ChartLegend{Position: "none"},
+		PlotArea:   excelize.ChartPlotArea{ShowVal: false, ShowCatName: false, ShowSerName: false},
+		Dimension:  excelize.ChartDimension{Width: 520, Height: 320},
+	})
 }
 
-// truncSheetName keeps sheet titles inside Excel's 31-char limit.
-func truncSheetName(name string) string {
-	runes := []rune(name)
-	if len(runes) <= 31 {
-		return name
+// ─── helpers ────────────────────────────────────────────────────────────────
+
+func colTypeAt(s ReportSheet, col int) ColType {
+	if col < len(s.ColTypes) {
+		return s.ColTypes[col]
 	}
-	return string(runes[:31])
+	return colText
 }
 
-// maxColWidth picks a column width based on header + sample row lengths.
-func maxColWidth(s ReportSheet, col int) float64 {
+// cellValue normalises pq's []byte/string scan results to the correct Go type
+// so Excel number formats and SUM formulas actually apply.
+func cellValue(v any, t ColType) any {
+	if v == nil {
+		return nil
+	}
+	s, ok := v.(string)
+	if !ok {
+		// already a real Go type — pass through (KPI floats, manual labels, etc.)
+		return v
+	}
+	switch t {
+	case colInt:
+		if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+			return n
+		}
+		if f, err := strconv.ParseFloat(s, 64); err == nil {
+			return int64(f)
+		}
+	case colMoney, colPercent:
+		if f, err := strconv.ParseFloat(s, 64); err == nil {
+			return f
+		}
+	}
+	return v
+}
+
+func widthForCol(s ReportSheet, col int) float64 {
 	w := float64(len([]rune(s.Headers[col])) + 4)
+	switch colTypeAt(s, col) {
+	case colMoney:
+		if w < 16 {
+			w = 16
+		}
+	case colInt:
+		if w < 12 {
+			w = 12
+		}
+	case colPercent:
+		if w < 12 {
+			w = 12
+		}
+	case colDate:
+		if w < 14 {
+			w = 14
+		}
+	}
 	sample := s.Rows
 	if len(sample) > 12 {
 		sample = sample[:12]
@@ -172,14 +606,19 @@ func maxColWidth(s ReportSheet, col int) float64 {
 			w = l
 		}
 	}
-	if w < 14 {
-		w = 14
-	}
-	if w > 48 {
-		w = 48
+	if w > 52 {
+		w = 52
 	}
 	return w
 }
 
-// ReportSheet re-exported so handler's maxColWidth can use the type without importing repository here.
-type ReportSheet = repository.ReportSheet
+// truncSheetName keeps sheet titles within Excel's 31-char limit.
+func truncSheetName(name string) string {
+	runes := []rune(name)
+	if len(runes) <= 31 {
+		return name
+	}
+	return string(runes[:31])
+}
+
+func boolp(b bool) *bool { return &b }
