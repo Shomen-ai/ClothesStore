@@ -1,3 +1,8 @@
+<!--
+  CartView - shopping-cart page (route: /cart).
+  Lists cart line items, applies a promo code, lets a logged-in user pick a
+  delivery address, then creates a pending order and hands off to /payment.
+-->
 <template>
   <div class="page">
     <header class="page-head">
@@ -107,6 +112,8 @@ import { getAddresses } from '@/api/user.js'
 import { validatePromo as apiValidatePromo, createOrder } from '@/api/orders.js'
 import CartItem from '@/components/cart/CartItem.vue'
 
+// Cart state (items, totals, promo) lives in the Pinia cart store (persisted to
+// localStorage); auth gates checkout and address loading.
 const cart = useCartStore()
 const auth = useAuthStore()
 const router = useRouter()
@@ -118,8 +125,10 @@ const promoError = ref('')
 const promoLoading = ref(false)
 const ordering = ref(false)
 
+// Checkout is allowed only when logged in, an address is chosen, and the cart is non-empty.
 const canOrder = computed(() => auth.isLoggedIn && selectedAddressID.value && cart.items.length > 0)
 
+// Preload the user's saved addresses and preselect their default one.
 onMounted(async () => {
   if (auth.isLoggedIn) {
     const { data } = await getAddresses()
@@ -129,6 +138,8 @@ onMounted(async () => {
   }
 })
 
+// Validate the promo against the current subtotal on the server; on success the
+// returned discount amount is stored in the cart store and applied to finalTotal.
 async function applyPromo() {
   promoError.value = ''
   promoLoading.value = true
@@ -142,6 +153,8 @@ async function applyPromo() {
   }
 }
 
+// Create the order from cart contents + chosen address/promo, clear the cart,
+// then route to the payment stub. The server recomputes prices server-side.
 async function placeOrder() {
   ordering.value = true
   try {

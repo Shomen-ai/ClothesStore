@@ -13,15 +13,23 @@ import (
 	"github.com/lib/pq"
 )
 
+// review_handler.go serves the product-review endpoints. ListForProduct is
+// public; the rest sit behind AuthRequired. Write operations are authorised
+// against the JWT user id (c.GetInt64("userID")) and, for posting, against
+// purchase eligibility.
 type ReviewHandler struct{ repo *repository.ReviewRepo }
 
+// NewReviewHandler constructs a ReviewHandler backed by the review repo.
 func NewReviewHandler(repo *repository.ReviewRepo) *ReviewHandler {
 	return &ReviewHandler{repo: repo}
 }
 
+// maxReviewTextLen caps the review body length accepted by validate().
 const maxReviewTextLen = 2000
 
-// GET /api/products/:id/reviews (public)
+// ListForProduct serves GET /api/products/:id/reviews (public). Returns visible
+// reviews plus the aggregate {avg_rating, count}. 200 on success, 400 on a bad
+// product id, 500 on a repo error.
 func (h *ReviewHandler) ListForProduct(c *gin.Context) {
 	productID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || productID <= 0 {
@@ -45,8 +53,11 @@ func (h *ReviewHandler) ListForProduct(c *gin.Context) {
 	})
 }
 
-// GET /api/products/:id/reviews/me (auth)
-// Returns {eligible: bool, own: Review|null} so the UI can render the right form state.
+// MyForProduct serves GET /api/products/:id/reviews/me (auth). It reports whether
+// the user may review the product (has a delivered order containing it) and
+// returns their existing review if any, as {eligible, own}, so the UI can pick
+// the right form state. 200 on success, 400 on a bad product id, 500 on a repo
+// error.
 func (h *ReviewHandler) MyForProduct(c *gin.Context) {
 	productID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || productID <= 0 {
@@ -68,11 +79,15 @@ func (h *ReviewHandler) MyForProduct(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"eligible": eligible, "own": own})
 }
 
+// reviewBody is the shared request body for Create and Update.
 type reviewBody struct {
 	Rating int    `json:"rating"`
 	Text   string `json:"text"`
 }
 
+// validate checks the rating is 1..5 and trims the text in place, rejecting text
+// longer than maxReviewTextLen. It returns an empty string when valid, otherwise
+// a client-facing error message.
 func (b *reviewBody) validate() string {
 	if b.Rating < 1 || b.Rating > 5 {
 		return "rating must be between 1 and 5"
@@ -84,7 +99,12 @@ func (b *reviewBody) validate() string {
 	return ""
 }
 
-// POST /api/products/:id/reviews (auth)
+// Create serves POST /api/products/:id/reviews (auth). It validates the body,
+// then requires the user to be eligible (a delivered order containing the
+// product) -> 403 otherwise. The unique (user_id, product_id) constraint means a
+// second review maps to 409. 201 with the created review, 400 on a bad
+// id/body/validation, 403 if not eligible, 409 if already reviewed, 500
+// otherwise.
 func (h *ReviewHandler) Create(c *gin.Context) {
 	productID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil || productID <= 0 {
@@ -126,7 +146,10 @@ func (h *ReviewHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, rv)
 }
 
-// PUT /api/products/:id/reviews/:rid (auth, own)
+// Update serves PUT /api/products/:id/reviews/:rid (auth). Ownership is enforced
+// in SQL (WHERE id AND user_id); a non-owned or missing review yields
+// sql.ErrNoRows -> 404. 200 with the updated review, 400 on a bad id/body, 404
+// if not found or not owned, 500 otherwise.
 func (h *ReviewHandler) Update(c *gin.Context) {
 	reviewID, err := strconv.ParseInt(c.Param("rid"), 10, 64)
 	if err != nil || reviewID <= 0 {
@@ -157,7 +180,9 @@ func (h *ReviewHandler) Update(c *gin.Context) {
 	c.JSON(http.StatusOK, rv)
 }
 
-// DELETE /api/products/:id/reviews/:rid (auth, own)
+// Delete serves DELETE /api/products/:id/reviews/:rid (auth). Ownership is
+// enforced in SQL; a non-owned or missing review yields 404. 204 on success, 400
+// on a bad id, 404 if not found or not owned, 500 otherwise.
 func (h *ReviewHandler) Delete(c *gin.Context) {
 	reviewID, err := strconv.ParseInt(c.Param("rid"), 10, 64)
 	if err != nil || reviewID <= 0 {

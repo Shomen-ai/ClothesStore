@@ -1,3 +1,8 @@
+<!--
+  ProfileView — edit the current user's profile (route: /account, the index child).
+  Name/phone/password are editable; email is read-only (sourced from the auth store).
+  An empty password field means "leave password unchanged".
+-->
 <template>
   <div>
     <h2 class="section-title">ПРОФИЛЬ</h2>
@@ -24,6 +29,7 @@ const form = ref({ name: '', phone: '', password: '' })
 const saving = ref(false)
 
 onMounted(async () => {
+  // Prefill the form from the server profile; password is intentionally left blank.
   const { data } = await getProfile()
   form.value.name = data.name || ''
   form.value.phone = data.phone || ''
@@ -32,6 +38,7 @@ onMounted(async () => {
 async function save() {
   saving.value = true
   try {
+    // Sends the whole form including password; an empty password is treated as "no change".
     await updateProfile(form.value)
     ElMessage({ message: 'Сохранено', type: 'success' })
   } catch {

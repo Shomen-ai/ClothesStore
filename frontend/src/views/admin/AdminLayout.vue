@@ -1,3 +1,9 @@
+<!--
+  AdminLayout — shell for the admin panel (route: /admin, meta.requiresAdmin).
+  Renders the fixed sidebar navigation and a <RouterView> outlet for the admin child routes
+  (dashboard / products / orders / promo-codes / reviews). Access is gated by the router
+  guard which checks auth.user.role === 'admin'; this layout itself does no auth checks.
+-->
 <template>
   <div class="admin-page">
     <aside class="admin-sidebar">
@@ -45,6 +51,7 @@
     </aside>
 
     <div class="admin-content">
+      <!-- Outlet for nested /admin/* child routes -->
       <RouterView />
     </div>
   </div>

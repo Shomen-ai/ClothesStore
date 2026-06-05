@@ -8,6 +8,8 @@ import (
 
 const secret = "test-secret-32-characters-long!!"
 
+// TestGenerateAndValidateAccessToken: a freshly minted access token round-trips
+// back to the same UserID and Role through ValidateToken.
 func TestGenerateAndValidateAccessToken(t *testing.T) {
 	token, err := appjwt.GenerateAccessToken(42, "customer", secret)
 	if err != nil {
@@ -25,6 +27,8 @@ func TestGenerateAndValidateAccessToken(t *testing.T) {
 	}
 }
 
+// TestValidateToken_WrongSecret: validating with the wrong secret fails the
+// signature check and returns an error.
 func TestValidateToken_WrongSecret(t *testing.T) {
 	token, _ := appjwt.GenerateAccessToken(1, "customer", secret)
 	_, err := appjwt.ValidateToken(token, "wrong-secret")
@@ -33,6 +37,8 @@ func TestValidateToken_WrongSecret(t *testing.T) {
 	}
 }
 
+// TestGenerateRefreshToken: a refresh token validates, carries the user ID, and
+// has the expected ~30-day lifetime.
 func TestGenerateRefreshToken(t *testing.T) {
 	token, err := appjwt.GenerateRefreshToken(99, secret)
 	if err != nil {

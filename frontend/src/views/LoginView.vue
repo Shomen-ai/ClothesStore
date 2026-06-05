@@ -1,3 +1,8 @@
+<!--
+  LoginView - email/password sign-in (route: /login).
+  On success, honors a ?redirect= target, else routes admins to /admin and
+  everyone else to /account.
+-->
 <template>
   <div class="auth-page">
     <div class="auth-card">
@@ -47,7 +52,9 @@ async function handleLogin() {
   error.value = ''
   loading.value = true
   try {
+    // auth.login hits /auth/login and stores the session (user + tokens).
     await auth.login(form.value.email, form.value.password)
+    // Return the user to where they were headed, or to a role-appropriate home.
     const redirect = route.query.redirect
     if (redirect) router.push(redirect)
     else router.push(auth.user?.role === 'admin' ? '/admin' : '/account')

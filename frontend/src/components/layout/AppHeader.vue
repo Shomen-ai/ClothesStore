@@ -1,3 +1,9 @@
+<!--
+  AppHeader: fixed top navigation bar. Holds the brand link, catalogue/sale nav,
+  theme toggle, cart button (with item-count badge), and an auth-aware action cluster
+  (account/admin/logout when signed in, otherwise a "login" link). Adds a `scrolled`
+  class once the page is scrolled to switch to its elevated/bordered style.
+-->
 <template>
   <header class="app-header" :class="{ scrolled }">
     <div class="header-inner">
@@ -35,9 +41,11 @@
             <circle cx="8" cy="17" r="1.2" fill="currentColor"/>
             <circle cx="15" cy="17" r="1.2" fill="currentColor"/>
           </svg>
+          <!-- Item-count badge, hidden when the cart is empty -->
           <span v-if="cart.count > 0" class="cart-badge">{{ cart.count }}</span>
         </RouterLink>
 
+        <!-- Signed-in actions: account, admin (admins only), logout -->
         <template v-if="auth.isLoggedIn">
           <RouterLink to="/account" class="action" aria-label="Аккаунт">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -45,6 +53,7 @@
               <path d="M3.5 17c1-3 3.5-4.5 6.5-4.5s5.5 1.5 6.5 4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
             </svg>
           </RouterLink>
+          <!-- Admin entry shown only to admin-role users (UI gate only; backend must still authorize) -->
           <RouterLink v-if="auth.user?.role === 'admin'" to="/admin" class="action admin-action" aria-label="Админ">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
               <path d="M10 1.5L17 5v6c0 4-3 6.5-7 8-4-1.5-7-4-7-8V5l7-3.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
@@ -56,6 +65,7 @@
             </svg>
           </button>
         </template>
+        <!-- Signed-out state: prompt to log in -->
         <RouterLink v-else to="/login" class="login-link">
           Войти
           <span class="login-arrow">→</span>
@@ -72,17 +82,22 @@ import { useCartStore } from '@/stores/cart.js'
 import { useThemeStore } from '@/stores/theme.js'
 import { useRouter } from 'vue-router'
 
+// Shared stores drive the auth-aware actions, cart badge, and theme toggle.
 const auth = useAuthStore()
 const cart = useCartStore()
 const theme = useThemeStore()
 const router = useRouter()
 const scrolled = ref(false)
 
+// Toggle the elevated header style after a few px of scroll.
 function onScroll() { scrolled.value = window.scrollY > 8 }
 
+// Track scroll position; passive listener since we never preventDefault. Run once on
+// mount to set the initial state (e.g. when navigating in already scrolled).
 onMounted(() => { onScroll(); window.addEventListener('scroll', onScroll, { passive: true }) })
 onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 
+// Clear the session and send the user to the login page.
 function handleLogout() { auth.logout(); router.push('/login') }
 </script>
 

@@ -1,3 +1,9 @@
+<!--
+  AdminPromoView — admin promo-code management (route: /admin/promo-codes).
+  Lists promo codes (usage counts, expiry, active status) and offers a create dialog.
+  Existing codes can only be deactivated or deleted, not edited. Code can be auto-generated
+  server-side when left blank. Admin role is enforced server-side.
+-->
 <template>
   <div>
     <header class="admin-view-head">
@@ -5,6 +11,7 @@
         <p class="eyebrow">Админка / Скидки</p>
         <h1 class="head-title">Промокоды <span class="gothic-accent">drop</span></h1>
       </div>
+      <!-- Open the create dialog and reset the form to defaults -->
       <button class="cta-add" @click="dialogOpen = true; resetForm()">
         <span class="cta-mark">+</span>
         <span class="cta-label">Новый код</span>
@@ -23,6 +30,7 @@
       </el-table-column>
       <el-table-column label="Активаций" width="140">
         <template #default="{ row }">
+          <!-- Used vs limit; null limit renders as ∞ (unlimited) -->
           {{ row.activations_count }} / {{ row.max_activations ?? '∞' }}
         </template>
       </el-table-column>
@@ -90,6 +98,8 @@ function resetForm() {
   form.value = { code:'', discount_type:'percent', discount_value:10, max_activations:null, expires_at:null }
 }
 
+// Create a promo. Empty optional fields are stripped from the payload so the server can
+// treat them as "unlimited / no expiry" rather than receiving null/empty values.
 async function create() {
   saving.value = true
   const payload = { ...form.value }
@@ -99,6 +109,7 @@ async function create() {
   finally { saving.value = false }
 }
 
+// Deactivate keeps the code (just patches local flag); delete removes it from the list.
 async function deactivate(row) { await adminDeactivatePromo(row.id); row.is_active = false }
 async function remove(id) { await adminDeletePromo(id); promos.value = promos.value.filter(p => p.id !== id) }
 

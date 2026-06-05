@@ -1,3 +1,7 @@
+<!--
+  AddressesView — customer's saved shipping addresses (route: /account/addresses).
+  Lists addresses and provides a single dialog reused for both create and edit, plus delete.
+-->
 <template>
   <div>
     <div class="view-header">
@@ -47,14 +51,18 @@ const form = ref({ city:'', street:'', house:'', apartment:'', zip_code:'', is_d
 
 onMounted(load)
 
+// Fetch the current user's addresses; the server scopes them to the authenticated user.
 async function load() { const { data } = await getAddresses(); addresses.value = data || [] }
 
+// Open the shared dialog. addr=null => create mode; otherwise edit a clone of the row
+// (spread copy so editing the form doesn't mutate the list before save).
 function openForm(addr) {
   editingAddr.value = addr
   form.value = addr ? { ...addr } : { city:'', street:'', house:'', apartment:'', zip_code:'', is_default: false }
   dialogOpen.value = true
 }
 
+// Same handler for create and update, branching on editingAddr; re-fetch on success.
 async function save() {
   if (editingAddr.value) await updateAddress(editingAddr.value.id, form.value)
   else await createAddress(form.value)

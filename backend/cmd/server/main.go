@@ -15,14 +15,20 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// main is the application entrypoint: it loads config, fails fast on missing
+// required settings, opens the DB, wires repositories/services/handlers, starts
+// background cleanup, registers the HTTP routes, and serves.
 func main() {
 	cfg := config.Load()
+	// DB connection string and JWT secret are mandatory; bail out loudly rather
+	// than start a half-functional server.
 	if cfg.DBConnStr == "" {
 		log.Fatal("DB_CONN_STR required")
 	}
 	if cfg.JWTSecret == "" {
 		log.Fatal("JWT_SECRET required")
 	}
+	// Ensure the directory that backs uploaded images exists before serving.
 	if err := os.MkdirAll(cfg.UploadsDir, 0755); err != nil {
 		log.Fatalf("uploads dir: %v", err)
 	}
@@ -32,7 +38,8 @@ func main() {
 		log.Fatalf("db connect: %v", err)
 	}
 
-	// Repos
+	// Repos — the data-access layer; one repo per aggregate, all sharing the
+	// single *sql.DB handle.
 	userRepo     := repository.NewUserRepo(database)
 	productRepo  := repository.NewProductRepo(database)
 	promoRepo    := repository.NewPromoRepo(database)
@@ -67,12 +74,14 @@ func main() {
 		}
 	}()
 
-	// Services
+	// Services — the business-logic layer; each service composes the repos
+	// (and config) it needs to enforce domain rules.
 	authSvc   := service.NewAuthService(userRepo, cfg.JWTSecret)
 	orderSvc  := service.NewOrderService(orderRepo, productRepo, promoRepo)
 	uploadSvc := service.NewUploadService(cfg.UploadsDir)
 
-	// Handlers
+	// Handlers — the HTTP layer; each handler adapts requests to a service/repo
+	// and is bound to its routes below.
 	authH         := handler.NewAuthHandler(authSvc, pendingRepo, mail)
 	catalogueH    := handler.NewCatalogueHandler(productRepo)
 	orderH        := handler.NewOrderHandler(orderSvc, promoRepo, orderRepo)
@@ -87,16 +96,21 @@ func main() {
 	adminReviewH  := handler.NewAdminReviewHandler(reviewRepo)
 
 	r := gin.Default()
+	// CORS is scoped to the Vite dev origin and allows credentials so the SPA
+	// can send the Authorization bearer token.
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     []string{"http://localhost:5173"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Authorization", "Content-Type"},
 		AllowCredentials: true,
 	}))
+	// Serve uploaded product images straight off disk at /uploads.
 	r.Static("/uploads", cfg.UploadsDir)
 
 	api := r.Group("/api")
 	{
+		// Auth endpoints — public; these issue/refresh tokens and run the
+		// email-verified registration flow (start → verify → resend).
 		auth := api.Group("/auth")
 		auth.POST("/login", authH.Login)
 		auth.POST("/refresh", authH.Refresh)
@@ -104,12 +118,15 @@ func main() {
 		auth.POST("/register/verify", authH.RegisterVerify)
 		auth.POST("/register/resend", authH.RegisterResend)
 
+		// Public catalogue — readable without a token (browse + read reviews).
 		api.GET("/categories", catalogueH.GetCategories)
 		api.GET("/products/featured", catalogueH.GetFeatured)
 		api.GET("/products", catalogueH.ListProducts)
 		api.GET("/products/:id", catalogueH.GetProduct)
 		api.GET("/products/:id/reviews", reviewH.ListForProduct)
 
+		// Authenticated routes — any logged-in user. AuthRequired validates the
+		// bearer JWT; covers checkout, promo validation and writing reviews.
 		protected := api.Group("", middleware.AuthRequired(cfg.JWTSecret))
 		protected.POST("/orders", orderH.Create)
 		protected.POST("/orders/:id/confirm-payment", orderH.ConfirmPayment)
@@ -119,6 +136,8 @@ func main() {
 		protected.PUT("/products/:id/reviews/:rid", reviewH.Update)
 		protected.DELETE("/products/:id/reviews/:rid", reviewH.Delete)
 
+		// Per-user account area — also auth-only; the user's own orders,
+		// wishlist, profile and shipping addresses.
 		user := api.Group("/user", middleware.AuthRequired(cfg.JWTSecret))
 		user.GET("/orders", orderH.GetUserOrders)
 		user.GET("/orders/:id", orderH.GetUserOrder)
@@ -132,6 +151,9 @@ func main() {
 		user.PUT("/addresses/:id", userH.UpdateAddress)
 		user.DELETE("/addresses/:id", userH.DeleteAddress)
 
+		// Admin back office — gated by two middlewares: a valid JWT
+		// (AuthRequired) plus the admin role (AdminRequired). Manages products,
+		// categories, orders, promo codes, stats, Excel reports and reviews.
 		admin := api.Group("/admin", middleware.AuthRequired(cfg.JWTSecret), middleware.AdminRequired())
 		admin.GET("/products", adminProductH.ListProducts)
 		admin.POST("/products", adminProductH.CreateProduct)
@@ -159,6 +181,7 @@ func main() {
 		admin.DELETE("/reviews/:id", adminReviewH.Delete)
 	}
 
+	// Start the blocking HTTP server on the configured port.
 	log.Printf("Listening on :%s", cfg.Port)
 	r.Run(":" + cfg.Port)
 }

@@ -1,3 +1,9 @@
+<!--
+  ReviewsView — admin moderation of product reviews (route: /admin/reviews).
+  Lists reviews with a server-side visibility filter, and lets the admin hide/show or delete
+  each review. The filter value is the string the API expects for ?hidden= (see load()).
+  Admin role is enforced server-side.
+-->
 <template>
   <div>
     <header class="admin-view-head">
@@ -6,6 +12,7 @@
         <h1 class="head-title">Голоса <span class="gothic-accent">клиентов</span></h1>
       </div>
       <div class="filter-row">
+        <!-- Filter maps to ?hidden=: '' = all, 'false' = visible, 'true' = hidden -->
         <el-radio-group v-model="filter" size="small" @change="load">
           <el-radio-button :value="''">Все</el-radio-button>
           <el-radio-button :value="'false'">Видимые</el-radio-button>
@@ -87,6 +94,8 @@ const filter = ref('')   // '', 'false', 'true'
 
 onMounted(load)
 
+// Load reviews, passing the visibility filter as the ?hidden= param. Empty filter ('') is
+// converted to undefined so the API omits the param and returns all reviews.
 async function load() {
   loading.value = true
   try {
@@ -98,6 +107,7 @@ async function load() {
   } finally { loading.value = false }
 }
 
+// Flip the review's hidden flag on the server, then patch the local row to match.
 async function toggleHidden(row) {
   try {
     await adminSetReviewHidden(row.id, !row.is_hidden)
@@ -110,6 +120,7 @@ async function toggleHidden(row) {
 
 async function remove(row) {
   try {
+    // Confirm dialog; a rejected promise (user cancelled) short-circuits via the catch.
     await ElMessageBox.confirm(`Удалить отзыв "${row.product_name}"?`, 'Подтверждение', {
       type: 'warning', confirmButtonText: 'Удалить', cancelButtonText: 'Отмена',
     })

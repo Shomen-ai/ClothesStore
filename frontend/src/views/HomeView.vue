@@ -1,3 +1,8 @@
+<!--
+  HomeView - landing page (route: /).
+  Hero plus two product rails (bestsellers and new arrivals) sourced from the
+  /featured endpoint; ProductCard reuses the wishlist store for heart state.
+-->
 <template>
   <div class="home">
     <!-- HERO -->
@@ -82,7 +87,9 @@ const newest = ref([])
 const wishlist = useWishlistStore()
 
 onMounted(async () => {
+  // Wishlist must load first so ProductCard hearts render filled where relevant.
   wishlist.load()
+  // Single call returns both rails: { hits, new }.
   const { data } = await getFeatured()
   hits.value = data.hits || []
   newest.value = data.new || []

@@ -1,3 +1,8 @@
+<!--
+  ProductView - single product detail page (route: /product/:id).
+  Image gallery, size picker, add-to-cart and wishlist toggle, plus a reviews
+  section. Renders only once the product has loaded.
+-->
 <template>
   <div class="page" v-if="product">
     <nav class="breadcrumbs">
@@ -109,9 +114,12 @@ const categories = ref([])
 const selectedSize = ref(null)
 const activeImage = ref('')
 
+// Reactive wishlist membership and category label, derived from loaded data.
 const inWishlist = computed(() => wishlist.has(product.value?.id))
 const categoryName = computed(() => categories.value.find(c => c.id === product.value?.category_id)?.name || '—')
 
+// Fetch one product, default the gallery to its primary (or first) image,
+// and reset any previously chosen size.
 async function loadProduct(id) {
   const { data } = await getProduct(id)
   product.value = data
@@ -128,8 +136,11 @@ onMounted(async () => {
   categories.value = catsRes.data || []
 })
 
+// Reload when navigating between products without unmounting the view.
 watch(() => route.params.id, (id) => { if (id) loadProduct(id) })
 
+// Require a size when the product has sizes; products without sizes use id 0.
+// Adds to the cart store (localStorage-backed) and shows a toast.
 function addToCart() {
   if (product.value.sizes?.length && !selectedSize.value) return
   const sizeID = selectedSize.value?.id || 0

@@ -1,3 +1,9 @@
+<!--
+  AdminOrdersView — admin order management (route: /admin/orders).
+  Lists all orders with server-side filtering by status and date range, and lets the admin
+  change an order's status inline via a per-row select. Mutations rely on the backend
+  enforcing the admin role (the route guard only hides the UI, see review note).
+-->
 <template>
   <div>
     <header class="admin-view-head">
@@ -25,6 +31,8 @@
       </el-table-column>
       <el-table-column label="Статус" width="160">
         <template #default="{ row }">
+          <!-- Inline status editor: :model-value (one-way) + @change so the value only
+               updates after the server call succeeds in changeStatus -->
           <el-select :model-value="row.status" size="small" @change="changeStatus(row, $event)" style="width:140px">
             <el-option v-for="s in statuses" :key="s.value" :value="s.value" :label="s.label" />
           </el-select>
@@ -52,6 +60,8 @@ const statuses = [
 
 onMounted(load)
 
+// Build query params from the active filters and (re)fetch. Called on mount and on every
+// filter change, so filtering is fully server-side.
 async function load() {
   const params = {}
   if (statusFilter.value) params.status = statusFilter.value
@@ -60,6 +70,7 @@ async function load() {
   orders.value = data || []
 }
 
+// Persist the new status, then patch the local row so the UI stays in sync without a refetch.
 async function changeStatus(row, status) {
   await adminUpdateStatus(row.id, status)
   row.status = status

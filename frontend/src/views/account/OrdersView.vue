@@ -1,3 +1,7 @@
+<!--
+  OrdersView — list of the customer's orders (route: /account/orders).
+  Each row links to its detail page; status is shown via a colored Element Plus tag.
+-->
 <template>
   <div>
     <h2 class="section-title">МОИ ЗАКАЗЫ</h2>
@@ -18,8 +22,10 @@ import { ref, onMounted } from 'vue'
 import { getUserOrders } from '@/api/user.js'
 
 const orders = ref([])
+// Load all of the current user's orders on mount.
 onMounted(async () => { const { data } = await getUserOrders(); orders.value = data || [] })
 
+// Status code -> Russian label and -> Element Plus tag color (duplicated across order views).
 const statusMap = { pending:'Ожидает', confirmed:'Подтверждён', shipped:'Отправлен', delivered:'Доставлен', cancelled:'Отменён' }
 const typeMap = { pending:'info', confirmed:'warning', shipped:'', delivered:'success', cancelled:'danger' }
 function statusLabel(s) { return statusMap[s] || s }

@@ -1,3 +1,9 @@
+<!--
+  PaymentView - card-payment stub for a pending order (route: /payment/:id).
+  Loads the order, runs client-side card validation (Luhn, expiry, CVV, holder),
+  fakes a bank delay, then confirms payment on the server and redirects to
+  /checkout-success. No real card data is ever sent to the backend.
+-->
 <template>
   <div class="pay-page" v-if="order">
     <!-- background marquee, keeps the brand identity on a "system" page -->
@@ -158,6 +164,9 @@ const cvvBlurred = ref(false)
 const processing = ref(false)
 const error = ref('')
 
+// `form` holds fields submitted conceptually; `display` holds the formatted
+// (spaced/slashed) strings bound to the inputs. Card number/expiry are never
+// posted - confirmPayment only needs the order id.
 onMounted(async () => {
   try {
     const { data } = await getOrder(route.params.id)
@@ -173,6 +182,7 @@ const digitsOnly = (s) => (s || '').replace(/\D/g, '')
 
 const cardDigits = computed(() => digitsOnly(display.cardNumber))
 
+// Detect card brand from the leading digits to drive the badge styling.
 const brand = computed(() => {
   const d = cardDigits.value
   if (!d) return 'unknown'
@@ -186,6 +196,7 @@ const brandLabel = computed(() => ({
   visa: 'VISA', mc: 'MC', mir: 'МИР', unknown: '••••',
 }[brand.value]))
 
+// Strip non-digits, cap at 16, then re-group into 4-digit blocks for display.
 function onCardInput() {
   const d = digitsOnly(display.cardNumber).slice(0, 16)
   display.cardNumber = d.replace(/(.{4})/g, '$1 ').trim()
@@ -198,6 +209,8 @@ function onCvvInput() { form.cvv = digitsOnly(form.cvv).slice(0, 3) }
 
 // ─── validators ───────────────────────────────────────────────
 
+// Standard Luhn checksum: double every second digit from the right, subtract 9
+// if >9, and the total must be divisible by 10.
 function luhn(d) {
   if (!d || d.length < 13) return false
   let sum = 0, alt = false
@@ -211,6 +224,7 @@ function luhn(d) {
 }
 const luhnValid = computed(() => luhn(cardDigits.value))
 
+// Expiry is valid only if MM is 1-12 and the last day of that month is not past.
 const expiryValid = computed(() => {
   const m = display.expiry.match(/^(\d{2})\/(\d{2})$/)
   if (!m) return false
@@ -223,10 +237,13 @@ const expiryValid = computed(() => {
 const cvvValid = computed(() => form.cvv.length === 3)
 const holderValid = computed(() => form.holder.trim().length >= 3)
 
+// Enable the pay button only when every card field passes validation.
 const formValid = computed(() => luhnValid.value && expiryValid.value && cvvValid.value && holderValid.value)
 
 // ─── pay ──────────────────────────────────────────────────────
 
+// Payment flow: guard -> fake 3s bank delay -> client-side decline check ->
+// server confirm -> redirect. Uses router.replace so Back doesn't reopen pay.
 async function onPay() {
   if (!formValid.value || processing.value) return
   error.value = ''

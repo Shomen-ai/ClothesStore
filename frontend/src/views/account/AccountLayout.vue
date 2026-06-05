@@ -1,3 +1,9 @@
+<!--
+  AccountLayout — shell for the customer account area (route: /account, requiresAuth).
+  Renders the decorative header, the side navigation, and a <RouterView> outlet for the
+  nested child routes (profile / orders / addresses / wishlist). Purely presentational:
+  no data fetching here — each child view loads its own data.
+-->
 <template>
   <div class="account-page">
     <header class="account-head">
@@ -38,6 +44,7 @@
         <RouterLink to="/account/wishlist">Избранное</RouterLink>
       </nav>
       <div class="account-content">
+        <!-- Outlet for nested /account/* child routes -->
         <RouterView />
       </div>
     </div>

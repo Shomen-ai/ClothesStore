@@ -1,3 +1,4 @@
+// Package repository: data-access layer for product reviews (customer + admin).
 package repository
 
 import (
@@ -7,12 +8,16 @@ import (
 	"clothes-store/internal/model"
 )
 
+// ReviewRepo provides queries over the product_reviews table.
 type ReviewRepo struct{ db *sql.DB }
 
+// NewReviewRepo constructs a ReviewRepo bound to db.
 func NewReviewRepo(db *sql.DB) *ReviewRepo { return &ReviewRepo{db: db} }
 
 // ListForProduct returns visible reviews (newest first), joining the display name.
 func (r *ReviewRepo) ListForProduct(productID int64) ([]model.Review, error) {
+	// Display name falls back to email when the profile name is blank:
+	// NULLIF('', '') turns an empty name into NULL so COALESCE picks the email.
 	rows, err := r.db.Query(`
 		SELECT r.id, r.user_id, r.product_id, r.rating, r.text, r.created_at, r.updated_at,
 		       COALESCE(NULLIF(u.name, ''), u.email) AS user_name
@@ -40,6 +45,8 @@ func (r *ReviewRepo) ListForProduct(productID int64) ([]model.Review, error) {
 // SummaryForProduct returns avg rating (rounded to 1 decimal) and visible count.
 func (r *ReviewRepo) SummaryForProduct(productID int64) (model.ReviewSummary, error) {
 	var s model.ReviewSummary
+	// COALESCE(..., 0) yields 0.0 for a product with no visible reviews; the
+	// ::float8 cast matches the Go float64 destination.
 	err := r.db.QueryRow(`
 		SELECT COALESCE(ROUND(AVG(rating)::numeric, 1), 0)::float8, COUNT(*)
 		FROM product_reviews
@@ -162,6 +169,8 @@ func (r *ReviewRepo) AdminList(hidden *bool) ([]model.Review, error) {
 	return out, rows.Err()
 }
 
+// AdminSetHidden toggles a review's visibility. Returns sql.ErrNoRows when no
+// review matched the id (zero rows affected), so callers can surface a 404.
 func (r *ReviewRepo) AdminSetHidden(reviewID int64, hidden bool) error {
 	res, err := r.db.Exec(`UPDATE product_reviews SET is_hidden = $1, updated_at = NOW() WHERE id = $2`, hidden, reviewID)
 	if err != nil {
@@ -174,6 +183,8 @@ func (r *ReviewRepo) AdminSetHidden(reviewID int64, hidden bool) error {
 	return nil
 }
 
+// AdminDelete removes any review by id (no owner check). Returns sql.ErrNoRows
+// when the id did not exist.
 func (r *ReviewRepo) AdminDelete(reviewID int64) error {
 	res, err := r.db.Exec(`DELETE FROM product_reviews WHERE id = $1`, reviewID)
 	if err != nil {

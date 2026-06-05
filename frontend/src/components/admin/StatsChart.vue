@@ -1,3 +1,8 @@
+<!--
+  StatsChart: admin dashboard revenue line chart (Chart.js via vue-chartjs).
+  Renders one dataset of revenue-over-time from the `points` prop. Colors are
+  theme-aware and recompute reactively when the global theme toggles.
+-->
 <template>
   <div class="chart-wrapper">
     <Line :data="chartData" :options="chartOptions" />
@@ -10,11 +15,15 @@ import { Line } from 'vue-chartjs'
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Filler } from 'chart.js'
 import { useThemeStore } from '@/stores/theme.js'
 
+// Chart.js is tree-shakeable: only the pieces this line chart uses are registered.
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Filler)
 
+// points: array of { date, revenue } samples plotted left-to-right.
 const props = defineProps({ points: Array })
 const theme = useThemeStore()
 
+// Brand color set chosen per active theme; computed so chartData/chartOptions below
+// re-derive (and the chart re-renders) whenever the theme changes.
 const palette = computed(() => {
   const dark = theme.theme === 'dark'
   return {
@@ -29,6 +38,7 @@ const palette = computed(() => {
   }
 })
 
+// Map the raw points into Chart.js shape: x-axis labels = dates, the single series = revenue.
 const chartData = computed(() => ({
   labels: props.points?.map(p => p.date) || [],
   datasets: [{
@@ -46,6 +56,7 @@ const chartData = computed(() => ({
   }]
 }))
 
+// maintainAspectRatio: false lets the chart fill the fixed-height .chart-wrapper.
 const chartOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,

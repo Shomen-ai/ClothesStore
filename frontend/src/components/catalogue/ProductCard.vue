@@ -1,3 +1,8 @@
+<!--
+  ProductCard: catalogue grid tile linking to the product detail page.
+  Shows primary image (with a second image revealed on hover), an optional SALE tag,
+  and a wishlist toggle. Wishlist state is read/written through the shared store.
+-->
 <template>
   <RouterLink :to="`/catalogue/${product.id}`" class="card" :class="{ 'has-sale': product.is_on_sale }">
     <div class="frame">
@@ -12,6 +17,7 @@
         on sale
       </span>
 
+      <!-- @click.prevent stops the click from also triggering the wrapping RouterLink navigation -->
       <button class="wish-btn" :class="{ active: inWishlist }" @click.prevent="toggleWish" aria-label="В избранное">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
           <path d="M8 14s-5-3.2-5-7.2A2.8 2.8 0 0 1 8 4.6a2.8 2.8 0 0 1 5 2.2C13 10.8 8 14 8 14Z"
@@ -35,18 +41,22 @@
 import { computed } from 'vue'
 import { useWishlistStore } from '@/stores/wishlist.js'
 
+// product: the catalogue item to render (id, name, price, is_on_sale, images[]).
 const props = defineProps({ product: Object })
 const wishlist = useWishlistStore()
 
+// Prefer the image flagged is_primary; fall back to the first image if none is flagged.
 const primaryImage = computed(() =>
   props.product.images?.find(i => i.is_primary)?.image_path ||
   props.product.images?.[0]?.image_path
 )
+// Second image (if present) shown on hover for a quick alternate view.
 const hoverImage = computed(() => props.product.images?.[1]?.image_path)
 const inWishlist = computed(() => wishlist.has(props.product.id))
 
 async function toggleWish() { await wishlist.toggle(props.product.id) }
 
+// Group thousands per ru-RU locale, no decimals (currency symbol added in template).
 function formatPrice(p) {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(p)
 }

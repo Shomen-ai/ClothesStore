@@ -1,3 +1,8 @@
+<!--
+  CatalogueView - product listing with search, filters and sort (route: /catalogue).
+  Reads the optional ?sale=1 query, fetches categories + products, and re-queries
+  the API whenever a filter changes (search input is debounced).
+-->
 <template>
   <div class="page">
     <header class="page-head">
@@ -111,12 +116,15 @@ const filtersOpen = ref(false)
 const wishlist = useWishlistStore()
 const route = useRoute()
 
+// Debounce search keystrokes so we don't fire a request on every character.
 let debounceTimer = null
 function debouncedLoad() {
   clearTimeout(debounceTimer)
   debounceTimer = setTimeout(load, 400)
 }
 
+// Build the query from active filters and fetch matching products.
+// Only non-empty filters are sent; price range ids map to min/max bounds.
 async function load() {
   loading.value = true
   const params = { page: 1 }
@@ -133,13 +141,16 @@ async function load() {
   loading.value = false
 }
 
+// Sync the "sale" filter from the URL so /catalogue?sale=1 deep-links work.
 function applyQuery() {
   filters.value.sale = route.query.sale === '1' || route.query.sale === 'true'
 }
 
+// React to in-app navigation that only changes the query string.
 watch(() => route.query, applyQuery)
 
 onMounted(async () => {
+  // Load wishlist (for heart state on cards), seed categories, then initial list.
   wishlist.load()
   applyQuery()
   const { data } = await getCategories()

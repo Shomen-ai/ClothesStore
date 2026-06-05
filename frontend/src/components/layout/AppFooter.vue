@@ -1,3 +1,8 @@
+<!--
+  AppFooter: static site-wide footer with brand block and three link columns
+  (catalogue / account / contact) plus a decorative bottom strip. Purely
+  presentational; the only dynamic bit is the auto-updating copyright year.
+-->
 <template>
   <footer class="app-footer">
     <div class="footer-grid">
@@ -43,6 +48,7 @@
 </template>
 
 <script setup>
+// Current year for the copyright line; computed once at render time.
 const year = new Date().getFullYear()
 </script>
 

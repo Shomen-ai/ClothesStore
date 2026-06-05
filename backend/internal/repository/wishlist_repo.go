@@ -1,3 +1,4 @@
+// Package repository: data-access layer for the per-user wishlist.
 package repository
 
 import (
@@ -5,10 +6,14 @@ import (
 	"clothes-store/internal/model"
 )
 
+// WishlistRepo provides queries over the wishlist join table (user ↔ product).
 type WishlistRepo struct{ db *sql.DB }
 
+// NewWishlistRepo constructs a WishlistRepo bound to db.
 func NewWishlistRepo(db *sql.DB) *WishlistRepo { return &WishlistRepo{db: db} }
 
+// Get returns the products on a user's wishlist, most recently added first,
+// joining wishlist rows to their product records.
 func (r *WishlistRepo) Get(userID int64) ([]model.Product, error) {
 	rows, err := r.db.Query(
 		`SELECT p.id,p.category_id,p.name,p.description,p.price,p.is_active,p.created_at
@@ -34,6 +39,7 @@ func (r *WishlistRepo) Get(userID int64) ([]model.Product, error) {
 	return products, nil
 }
 
+// Add inserts a (user, product) wishlist entry.
 func (r *WishlistRepo) Add(userID, productID int64) error {
 	_, err := r.db.Exec(
 		`INSERT INTO wishlist(user_id,product_id) VALUES($1,$2)`, userID, productID,
@@ -41,6 +47,7 @@ func (r *WishlistRepo) Add(userID, productID int64) error {
 	return err
 }
 
+// Remove deletes a product from the user's wishlist.
 func (r *WishlistRepo) Remove(userID, productID int64) error {
 	_, err := r.db.Exec(`DELETE FROM wishlist WHERE user_id=$1 AND product_id=$2`, userID, productID)
 	return err

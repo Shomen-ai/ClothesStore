@@ -18,18 +18,27 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// auth_handler.go serves the public authentication endpoints under /api/auth:
+// login, token refresh, and the three-step email-verified registration flow
+// (start -> verify -> resend). These routes are unauthenticated.
 type AuthHandler struct {
 	svc         *service.AuthService
 	pendingRepo *repository.PendingRegistrationRepo
 	mail        mailer.Mailer
 }
 
+// NewAuthHandler wires the auth service, the pending-registration repo (which
+// stages sign-ups awaiting email verification) and the mailer that delivers
+// verification codes.
 func NewAuthHandler(svc *service.AuthService, pending *repository.PendingRegistrationRepo, m mailer.Mailer) *AuthHandler {
 	return &AuthHandler{svc: svc, pendingRepo: pending, mail: m}
 }
 
 // ─── login / refresh ────────────────────────────────────────────────────────
 
+// Login serves POST /api/auth/login. On valid credentials it returns 200 with
+// {user, tokens}. Any failure (unknown email or wrong password) maps to 401 with
+// a generic message, avoiding user enumeration. 400 on a malformed body.
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req struct {
 		Email    string `json:"email" binding:"required"`
@@ -47,6 +56,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"user": user, "tokens": tokens})
 }
 
+// Refresh serves POST /api/auth/refresh, exchanging a valid refresh token for a
+// fresh token pair. 200 with the new tokens, 400 on a malformed body, 401 if the
+// refresh token is invalid or expired.
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	var req struct {
 		RefreshToken string `json:"refresh_token" binding:"required"`
@@ -65,6 +77,13 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 
 // ─── email-verified registration ────────────────────────────────────────────
 
+// RegisterStart serves POST /api/auth/register/start, the first step of sign-up.
+// It validates the body (valid email, password >= 6 chars, name required),
+// rejects already-registered emails with 409, then bcrypts the password and
+// stages a pending_registration row carrying a 6-digit code, a 10-minute expiry
+// and a 60-second resend cooldown, and emails the code. The user row is not
+// created until RegisterVerify. 200 {sent:true} on success, 400 on a bad body,
+// 409 if the email is taken, 502 if the email send fails, 500 on a repo error.
 func (h *AuthHandler) RegisterStart(c *gin.Context) {
 	var req struct {
 		Email    string `json:"email" binding:"required,email"`
@@ -116,6 +135,13 @@ func (h *AuthHandler) RegisterStart(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"sent": true})
 }
 
+// RegisterVerify serves POST /api/auth/register/verify, the second step. It
+// looks up the pending registration by email and enforces, in order: at most 5
+// attempts (429), not expired (410), and a matching code (wrong code bumps the
+// attempt counter and returns 400). On success it creates the real user from the
+// pre-hashed password, deletes the pending row, and returns 201 with
+// {user, tokens}. 404 if no pending registration exists, 409 if the email was
+// registered in the meantime, 500 on a repo error.
 func (h *AuthHandler) RegisterVerify(c *gin.Context) {
 	var req struct {
 		Email string `json:"email" binding:"required,email"`
@@ -163,6 +189,11 @@ func (h *AuthHandler) RegisterVerify(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"user": user, "tokens": tokens})
 }
 
+// RegisterResend serves POST /api/auth/register/resend. Subject to the
+// 60-second cooldown (429 if still within it), it generates a new code, resets
+// the attempt counter and expiry/cooldown windows, and re-sends the email. 200
+// {sent:true} on success, 404 if no pending registration exists, 429 if called
+// too soon, 502 on a send failure, 500 on a repo error.
 func (h *AuthHandler) RegisterResend(c *gin.Context) {
 	var req struct {
 		Email string `json:"email" binding:"required,email"`
@@ -205,6 +236,7 @@ func (h *AuthHandler) RegisterResend(c *gin.Context) {
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
+// gen6Code returns a zero-padded 6-digit verification code from crypto/rand.
 func gen6Code() string {
 	n, err := rand.Int(rand.Reader, big.NewInt(1000000))
 	if err != nil {
@@ -215,6 +247,8 @@ func gen6Code() string {
 	return fmt.Sprintf("%06d", n.Int64())
 }
 
+// normaliseEmail lower-cases and trims an email so lookups and the
+// pending-registration key are case-insensitive and whitespace-insensitive.
 func normaliseEmail(s string) string {
 	return strings.ToLower(strings.TrimSpace(s))
 }

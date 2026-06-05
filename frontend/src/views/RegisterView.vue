@@ -1,3 +1,9 @@
+<!--
+  RegisterView - two-step sign-up with email verification (route: /register).
+  Step 1 collects name/email/phone/password and requests a 6-digit code
+  (/auth/register/start). Step 2 enters the code (/auth/register/verify), which
+  returns a session and logs the user in. A resend link is rate-limited locally.
+-->
 <template>
   <div class="auth-page">
     <div class="auth-card">
@@ -45,6 +51,7 @@
         </p>
 
         <form class="auth-form" @submit.prevent="confirmCode">
+          <!-- Six single-char inputs; refs are collected so focus can hop between cells -->
           <div class="code-grid">
             <input v-for="(_, i) in 6" :key="i"
               :ref="el => codeInputs[i] = el"
@@ -106,8 +113,10 @@ const resending = ref(false)
 const resendCountdown = ref(0)
 let resendTimer = null
 
+// The six digit-cells joined into one string for submission/validation.
 const codeStr = computed(() => code.value.join(''))
 
+// Local cooldown that disables the "resend" button after each send.
 function startResendCountdown(seconds = 60) {
   resendCountdown.value = seconds
   clearInterval(resendTimer)
@@ -119,8 +128,11 @@ function startResendCountdown(seconds = 60) {
   }, 1000)
 }
 
+// Avoid a leaked interval if the user leaves mid-countdown.
 onUnmounted(() => { if (resendTimer) clearInterval(resendTimer) })
 
+// Step 1 submit: validate locally, ask the server to email a code, then advance
+// to step 2 (reset cells, start cooldown, focus the first cell).
 async function goToCode() {
   error.value = ''
   if (form.value.password.length < 6) {
@@ -150,12 +162,14 @@ async function goToCode() {
   }
 }
 
+// Keep only the last typed digit per cell and auto-advance focus.
 function onCodeInput(i, e) {
   const v = e.target.value.replace(/\D/g, '').slice(-1)
   code.value[i] = v
   if (v && i < 5) codeInputs[i + 1]?.focus()
 }
 
+// Backspace on an empty cell clears and focuses the previous one.
 function onBackspace(i, e) {
   if (!code.value[i] && i > 0) {
     codeInputs[i - 1]?.focus()
@@ -164,6 +178,7 @@ function onBackspace(i, e) {
   }
 }
 
+// Paste a full code at once: spread digits across the six cells.
 function onPaste(e) {
   const text = (e.clipboardData?.getData('text') || '').replace(/\D/g, '').slice(0, 6)
   if (!text) return
@@ -172,6 +187,8 @@ function onPaste(e) {
   codeInputs[last]?.focus()
 }
 
+// Step 2 submit: verify the code; on success the server returns {user, tokens},
+// which setSession persists, then we redirect (honoring ?redirect=).
 async function confirmCode() {
   error.value = ''
   if (codeStr.value.length !== 6) {
@@ -194,6 +211,7 @@ async function confirmCode() {
   }
 }
 
+// Request a fresh code, respecting the local cooldown, and restart it.
 async function resendCode() {
   if (resendCountdown.value > 0 || resending.value) return
   resending.value = true

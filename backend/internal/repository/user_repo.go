@@ -1,3 +1,4 @@
+// Package repository: data-access layer for users and their saved addresses.
 package repository
 
 import (
@@ -5,10 +6,13 @@ import (
 	"clothes-store/internal/model"
 )
 
+// UserRepo provides queries over the users and addresses tables.
 type UserRepo struct{ db *sql.DB }
 
+// NewUserRepo constructs a UserRepo bound to db.
 func NewUserRepo(db *sql.DB) *UserRepo { return &UserRepo{db: db} }
 
+// Create inserts a user and writes the generated id back into u.
 func (r *UserRepo) Create(u *model.User) error {
 	return r.db.QueryRow(
 		`INSERT INTO users(email,password_hash,name,phone,role)
@@ -17,6 +21,8 @@ func (r *UserRepo) Create(u *model.User) error {
 	).Scan(&u.ID)
 }
 
+// GetByEmail loads a user by email, including the password hash for login
+// verification. COALESCE maps a NULL phone to an empty string.
 func (r *UserRepo) GetByEmail(email string) (*model.User, error) {
 	u := &model.User{}
 	err := r.db.QueryRow(
@@ -29,6 +35,8 @@ func (r *UserRepo) GetByEmail(email string) (*model.User, error) {
 	return u, nil
 }
 
+// GetByID loads a user by id (without the password hash, for profile display).
+// COALESCE maps a NULL phone to an empty string.
 func (r *UserRepo) GetByID(id int64) (*model.User, error) {
 	u := &model.User{}
 	err := r.db.QueryRow(
@@ -40,6 +48,7 @@ func (r *UserRepo) GetByID(id int64) (*model.User, error) {
 	return u, nil
 }
 
+// Update saves editable profile fields (name and phone) for a user.
 func (r *UserRepo) Update(u *model.User) error {
 	_, err := r.db.Exec(
 		`UPDATE users SET name=$1,phone=$2 WHERE id=$3`,
@@ -48,11 +57,13 @@ func (r *UserRepo) Update(u *model.User) error {
 	return err
 }
 
+// UpdatePassword replaces the stored password hash for a user.
 func (r *UserRepo) UpdatePassword(id int64, hash string) error {
 	_, err := r.db.Exec(`UPDATE users SET password_hash=$1 WHERE id=$2`, hash, id)
 	return err
 }
 
+// CreateAddress inserts an address for a user and writes the generated id back into a.
 func (r *UserRepo) CreateAddress(a *model.Address) error {
 	return r.db.QueryRow(
 		`INSERT INTO addresses(user_id,city,street,house,apartment,zip_code,is_default)
@@ -61,6 +72,8 @@ func (r *UserRepo) CreateAddress(a *model.Address) error {
 	).Scan(&a.ID)
 }
 
+// GetAddresses returns a user's addresses with the default one first
+// (ORDER BY is_default DESC puts the true/default ahead of the others).
 func (r *UserRepo) GetAddresses(userID int64) ([]model.Address, error) {
 	rows, err := r.db.Query(
 		`SELECT id,user_id,city,street,house,apartment,zip_code,is_default
@@ -86,6 +99,8 @@ func (r *UserRepo) GetAddresses(userID int64) ([]model.Address, error) {
 	return addrs, nil
 }
 
+// UpdateAddress edits an address; the user_id predicate scopes the update to the
+// owner so one user cannot modify another's address.
 func (r *UserRepo) UpdateAddress(a *model.Address) error {
 	_, err := r.db.Exec(
 		`UPDATE addresses SET city=$1,street=$2,house=$3,apartment=$4,zip_code=$5,is_default=$6
@@ -95,17 +110,21 @@ func (r *UserRepo) UpdateAddress(a *model.Address) error {
 	return err
 }
 
+// DeleteAddress removes an address, scoped to its owner via the user_id predicate.
 func (r *UserRepo) DeleteAddress(id, userID int64) error {
 	_, err := r.db.Exec(`DELETE FROM addresses WHERE id=$1 AND user_id=$2`, id, userID)
 	return err
 }
 
+// SetDefaultAddress makes one address the user's default. It runs in a
+// transaction: first clear the flag on all of the user's addresses, then set it
+// on the target, so at most one default ever exists.
 func (r *UserRepo) SetDefaultAddress(id, userID int64) error {
 	tx, err := r.db.Begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer tx.Rollback() // no-op after Commit; undoes the partial update on error
 	if _, err = tx.Exec(`UPDATE addresses SET is_default=false WHERE user_id=$1`, userID); err != nil {
 		return err
 	}

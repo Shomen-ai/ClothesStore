@@ -1,4 +1,9 @@
+<!--
+  OrderDetailView — a single customer order (route: /account/orders/:id).
+  Loads one order by the :id route param and renders its status, totals, and line items.
+-->
 <template>
+  <!-- Render nothing until the order has loaded (order starts as null) -->
   <div v-if="order">
     <div class="detail-header">
       <h2 class="section-title">ЗАКАЗ #{{ order.id }}</h2>
@@ -24,8 +29,10 @@ import { getUserOrder } from '@/api/user.js'
 
 const route = useRoute()
 const order = ref(null)
+// Fetch the order keyed by the URL :id param (server enforces it belongs to this user).
 onMounted(async () => { const { data } = await getUserOrder(route.params.id); order.value = data })
 
+// Map raw status codes to Russian labels and to Element Plus tag color types.
 const statusMap = { pending:'Ожидает', confirmed:'Подтверждён', shipped:'Отправлен', delivered:'Доставлен', cancelled:'Отменён' }
 const typeMap = { pending:'info', confirmed:'warning', shipped:'', delivered:'success', cancelled:'danger' }
 function statusLabel(s) { return statusMap[s] || s }

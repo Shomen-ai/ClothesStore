@@ -1,3 +1,9 @@
+<!--
+  DashboardView — admin analytics dashboard (route: /admin, the index child).
+  Shows revenue (with a chart), orders-by-status, top products, and promo activations for a
+  selectable period. All stats are fetched server-side per period; the .xlsx report is
+  downloaded as a blob and saved client-side. Admin role is enforced server-side.
+-->
 <template>
   <div class="dashboard">
     <header class="view-head">
@@ -27,6 +33,7 @@
         <p class="eyebrow">Админка / Дашборд</p>
         <h1 class="head-title">Цифры <span class="gothic-accent">громко</span></h1>
       </div>
+      <!-- Triggers the Excel report download; disabled while the blob is being prepared -->
       <button class="cta-add report-cta" :disabled="reportLoading" @click="downloadReport">
         <span class="cta-mark">⇩</span>
         <span class="cta-label">{{ reportLoading ? 'Готовим…' : 'Скачать отчёт' }}</span>
@@ -37,6 +44,7 @@
     <div class="period-bar">
       <span class="period-label">Период</span>
       <div class="period-switch">
+        <!-- Period switch: set the period and re-fetch all stats for it -->
         <button v-for="opt in periodOptions" :key="opt.value"
           class="period-btn" :class="{ active: period === opt.value }"
           @click="period = opt.value; loadAll()">
@@ -52,6 +60,8 @@
           <span class="card-period">/ {{ currentPeriodLabel }}</span>
         </div>
         <div class="big-number">{{ formatPrice(totalRevenue) }}</div>
+        <!-- :key forces a full chart remount when the period or theme changes, so the
+             chart redraws with new data/colors instead of trying to diff in place -->
         <StatsChart :points="revenuePoints" :key="`${period}-${theme.theme}`" />
       </article>
 
@@ -116,6 +126,9 @@ const topProducts = ref([])
 const promoStats = ref([])
 const reportLoading = ref(false)
 
+// Fetch the report as a binary blob and trigger a client-side download via a temporary
+// <a download>. The filename embeds a local timestamp. Note: ignores the selected period —
+// see review note.
 async function downloadReport() {
   reportLoading.value = true
   try {
@@ -147,11 +160,14 @@ const periodOptions = [
 ]
 const currentPeriodLabel = computed(() => periodOptions.find(o => o.value === period.value)?.label || '')
 
+// Headline revenue figure: sum of the per-point revenue values returned for the period.
 const totalRevenue = computed(() => revenuePoints.value.reduce((s, p) => s + p.revenue, 0))
 
 const statusMap = { pending:'Ожидает', confirmed:'Подтверждён', shipped:'Отправлен', delivered:'Доставлен', cancelled:'Отменён' }
 function statusLabel(s) { return statusMap[s] || s }
 
+// Fetch all four widgets in parallel for the current period. The orders endpoint returns a
+// combined payload (by_status + top_products) that feeds two separate cards.
 async function loadAll() {
   const [rev, ord, promo] = await Promise.all([
     getRevenueStats(period.value),

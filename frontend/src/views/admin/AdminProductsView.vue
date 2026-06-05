@@ -1,3 +1,9 @@
+<!--
+  AdminProductsView — admin product catalog CRUD (route: /admin/products).
+  Table of products with inline active-toggle and sale flag, plus a dialog (reused for
+  create/edit) wrapping ProductForm. On save, the product is created/updated and any
+  newly picked images are uploaded as multipart. Admin role is enforced server-side.
+-->
 <template>
   <div>
     <header class="admin-view-head">
@@ -25,6 +31,7 @@
       </el-table-column>
       <el-table-column label="Активен" width="100">
         <template #default="{ row }">
+          <!-- One-way bind + @change so the toggle reflects state only after the PUT lands -->
           <el-switch :model-value="row.is_active" @change="toggleActive(row)" />
         </template>
       </el-table-column>
@@ -43,6 +50,8 @@
       </el-table-column>
     </el-table>
 
+    <!-- Single dialog reused for create (editingId=null) and edit. ProductForm emits
+         files-changed with the list of newly picked File objects to upload on save. -->
     <el-dialog v-model="dialogOpen" :title="editingId ? 'Редактировать товар' : 'Новый товар'" width="600px">
       <ProductForm v-model="formData" :categories="categories" :product-id="editingId"
         :images="editingImages" @files-changed="pendingFiles = $event" />
@@ -67,27 +76,34 @@ const editingId = ref(null)
 const editingImages = ref([])
 const saving = ref(false)
 const pendingFiles = ref([])
+// Factory for a blank product form (used for create and when resetting the dialog).
 const emptyForm = () => ({ name:'', description:'', category_id:null, price:0, is_active:true, is_on_sale:false, sizes:[] })
 const formData = ref(emptyForm())
 
 onMounted(async () => {
+  // Fetch products and categories in parallel for the table and the form's category select.
   const [p, c] = await Promise.all([adminListProducts(), adminGetCategories()])
   products.value = p.data || []
   categories.value = c.data || []
 })
 
+// Open the dialog in create mode: clear edit id, existing images, and pending uploads.
 function openCreate() {
   editingId.value = null; editingImages.value = []; pendingFiles.value = []
   formData.value = emptyForm()
   dialogOpen.value = true
 }
 
+// Open the dialog in edit mode: seed it with a clone of the row (so live edits don't
+// mutate the table) and pass through the product's existing images.
 function openEdit(p) {
   editingId.value = p.id; editingImages.value = p.images || []; pendingFiles.value = []
   formData.value = { ...p }
   dialogOpen.value = true
 }
 
+// Save flow: update or create the product first to obtain an id, then (if any new files
+// were picked) upload them as multipart against that id, and finally re-fetch the list.
 async function save() {
   saving.value = true
   try {
@@ -111,11 +127,13 @@ async function save() {
   }
 }
 
+// Inline active toggle: PUT the whole row with the flipped flag, then update local state.
 async function toggleActive(row) {
   await adminUpdateProduct(row.id, { ...row, is_active: !row.is_active })
   row.is_active = !row.is_active
 }
 
+// Confirm, delete on the server, then optimistically drop the row from the list.
 async function remove(id) {
   await ElMessageBox.confirm('Удалить товар?', 'Подтверждение', { type: 'warning' })
   await adminDeleteProduct(id)

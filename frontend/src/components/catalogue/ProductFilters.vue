@@ -1,3 +1,9 @@
+<!--
+  ProductFilters: catalogue sidebar controls (category, size, price ranges, sale-only,
+  sort). Acts as a multi-prop controlled component: parent passes current values via
+  model* props and receives changes via update:* emits (one per facet). Local refs
+  mirror the props so the UI stays responsive while the parent owns the source of truth.
+-->
 <template>
   <div class="filters">
     <section class="group">
@@ -52,17 +58,21 @@
 <script setup>
 import { ref, watch } from 'vue'
 
+// Props are the parent-owned current filter values; categories is the list to render.
 const props = defineProps({
   categories: Array,
-  modelCategory: Number,
-  modelSize: String,
-  modelSort: String,
-  modelPrice: { type: Array, default: () => [] },
-  modelSale: Boolean,
+  modelCategory: Number,                          // selected category id (null = all)
+  modelSize: String,                              // single selected size ('' = any)
+  modelSort: String,                              // sort key ('' = newest)
+  modelPrice: { type: Array, default: () => [] }, // selected price-range ids (multi-select)
+  modelSale: Boolean,                             // sale-only toggle
 })
+// One update event per facet so the parent can sync each filter (e.g. to the URL) independently.
 const emit = defineEmits(['update:category', 'update:size', 'update:sort', 'update:price', 'update:sale'])
 
 const sizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL']
+// Display labels for the price buckets. Ids must stay in sync with PRICE_RANGES in
+// priceRanges.js, which holds the matching numeric bounds (see review note on duplication).
 const priceRanges = [
   { id: 'p1', label: 'до 3 000 ₽' },
   { id: 'p2', label: '3 000 — 5 000 ₽' },
@@ -75,22 +85,28 @@ const sortOptions = [
   { value: 'price_desc', label: 'Сначала дороже' },
 ]
 
+// Local mirrors of the props, so toggling a control updates the UI instantly.
 const localCat   = ref(props.modelCategory)
 const localSize  = ref(props.modelSize || '')
 const localSort  = ref(props.modelSort || '')
-const localPrice = ref([...(props.modelPrice || [])])
+const localPrice = ref([...(props.modelPrice || [])])  // cloned so we don't mutate the prop array
 const localSale  = ref(!!props.modelSale)
 
+// Keep local state in sync when the parent changes a value externally (e.g. URL-driven
+// reset / back-navigation). NOTE: modelSize and modelSort are intentionally not watched
+// here — see review note about that asymmetry.
 watch(() => props.modelSale,  v => { localSale.value = !!v })
 watch(() => props.modelPrice, v => { localPrice.value = [...(v || [])] })
 watch(() => props.modelCategory, v => { localCat.value = v })
 
 function setCat(id) { localCat.value = id; emit('update:category', id) }
 function setSort(v) { localSort.value = v; emit('update:sort', v) }
+// Size is single-select: clicking the active size clears it (toggle off).
 function toggleSize(s) {
   localSize.value = localSize.value === s ? '' : s
   emit('update:size', localSize.value)
 }
+// Emit a fresh copy of the selected price-range ids whenever a checkbox flips.
 function onPriceChange() { emit('update:price', [...localPrice.value]) }
 </script>
 

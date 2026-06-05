@@ -1,3 +1,9 @@
+<!--
+  CartItem: a single row in the shopping cart. Renders the product thumbnail/name,
+  the chosen size + article number, unit and line prices, and a quantity stepper.
+  Emits 'update-qty' / 'remove' to the parent (the cart view owns the cart store);
+  this component does not mutate the cart directly.
+-->
 <template>
   <div class="cart-item">
     <RouterLink :to="`/catalogue/${item.product_id}`" class="thumb">
@@ -12,6 +18,7 @@
         <span class="meta-val">{{ item.size }}</span>
         <span class="meta-sep">·</span>
         <span class="meta-key">арт.</span>
+        <!-- Article number: product id zero-padded to 4 digits for display -->
         <span class="meta-val">#{{ String(item.product_id).padStart(4, '0') }}</span>
       </p>
       <p class="unit-price">{{ formatPrice(item.price) }} <span class="unit">/ шт</span></p>
@@ -37,15 +44,20 @@
 
 <script setup>
 import { ref, watch } from 'vue'
+// item: a cart line { product_id, product_size_id, name, image, size, price, quantity }.
 const props = defineProps({ item: Object })
+// product_size_id (the specific size variant) is the identifier sent back on edits/removal.
 const emit = defineEmits(['remove', 'update-qty'])
+// Local editable quantity, seeded from the prop and clamped to 1..99 by inc/dec.
 const qty = ref(props.item.quantity)
 
+// Re-sync if the cart store changes this line's quantity from elsewhere.
 watch(() => props.item.quantity, v => { qty.value = v })
 
 function inc() { if (qty.value < 99) { qty.value++; emit('update-qty', props.item.product_size_id, qty.value) } }
 function dec() { if (qty.value > 1) { qty.value--; emit('update-qty', props.item.product_size_id, qty.value) } }
 
+// Format as Russian rubles, no decimals.
 function formatPrice(p) {
   return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0, style: 'currency', currency: 'RUB' }).format(p)
 }

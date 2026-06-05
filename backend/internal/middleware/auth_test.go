@@ -11,6 +11,8 @@ import (
 
 const secret = "test-secret-32-characters-long!!"
 
+// setupRouter builds a test engine with a customer-protected route and an
+// admin-only route, both guarded by the real middleware chain.
 func setupRouter(secret string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -24,6 +26,7 @@ func setupRouter(secret string) *gin.Engine {
 	return r
 }
 
+// TestAuthRequired_NoToken: a request with no Authorization header is rejected 401.
 func TestAuthRequired_NoToken(t *testing.T) {
 	r := setupRouter(secret)
 	w := httptest.NewRecorder()
@@ -34,6 +37,7 @@ func TestAuthRequired_NoToken(t *testing.T) {
 	}
 }
 
+// TestAuthRequired_ValidToken: a valid Bearer token passes the guard with 200.
 func TestAuthRequired_ValidToken(t *testing.T) {
 	r := setupRouter(secret)
 	token, _ := appjwt.GenerateAccessToken(7, "customer", secret)
@@ -46,6 +50,8 @@ func TestAuthRequired_ValidToken(t *testing.T) {
 	}
 }
 
+// TestAdminRequired_CustomerForbidden: a customer token authenticates but is
+// blocked from the admin route with 403.
 func TestAdminRequired_CustomerForbidden(t *testing.T) {
 	r := setupRouter(secret)
 	token, _ := appjwt.GenerateAccessToken(7, "customer", secret)

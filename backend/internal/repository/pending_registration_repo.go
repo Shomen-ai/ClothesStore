@@ -1,3 +1,5 @@
+// Package repository: data-access layer for the email-verification staging area
+// (pending registrations) used during sign-up before a real user row exists.
 package repository
 
 import (
@@ -6,6 +8,9 @@ import (
 	"time"
 )
 
+// PendingRegistration holds the not-yet-confirmed sign-up: the hashed password
+// and profile fields are parked here until the emailed Code is verified, along
+// with the attempt counter and the expiry / resend-throttle timestamps.
 type PendingRegistration struct {
 	Email        string
 	Code         string
@@ -17,8 +22,11 @@ type PendingRegistration struct {
 	ResendAfter  time.Time
 }
 
+// PendingRegistrationRepo provides access to the pending_registrations table,
+// keyed by email (one in-flight sign-up per address).
 type PendingRegistrationRepo struct{ db *sql.DB }
 
+// NewPendingRegistrationRepo constructs a PendingRegistrationRepo bound to db.
 func NewPendingRegistrationRepo(db *sql.DB) *PendingRegistrationRepo {
 	return &PendingRegistrationRepo{db: db}
 }
@@ -30,6 +38,8 @@ func (r *PendingRegistrationRepo) Upsert(p *PendingRegistration) error {
 		INSERT INTO pending_registrations
 		  (email, code, password_hash, name, phone, attempts, expires_at, resend_after)
 		VALUES ($1, $2, $3, $4, $5, 0, $6, $7)
+		-- email is the conflict key: a repeated sign-up overwrites the prior
+		-- pending row and zeroes attempts via the EXCLUDED (proposed) values.
 		ON CONFLICT (email) DO UPDATE SET
 		  code          = EXCLUDED.code,
 		  password_hash = EXCLUDED.password_hash,
@@ -42,6 +52,8 @@ func (r *PendingRegistrationRepo) Upsert(p *PendingRegistration) error {
 	return err
 }
 
+// Get fetches the pending registration for an email, returning (nil, nil) when
+// none exists so callers can distinguish "no pending sign-up" from a real error.
 func (r *PendingRegistrationRepo) Get(email string) (*PendingRegistration, error) {
 	var p PendingRegistration
 	err := r.db.QueryRow(`
@@ -57,11 +69,14 @@ func (r *PendingRegistrationRepo) Get(email string) (*PendingRegistration, error
 	return &p, nil
 }
 
+// BumpAttempts increments the wrong-code attempt counter (for lockout enforcement).
 func (r *PendingRegistrationRepo) BumpAttempts(email string) error {
 	_, err := r.db.Exec(`UPDATE pending_registrations SET attempts = attempts + 1 WHERE email = $1`, email)
 	return err
 }
 
+// Delete removes the pending row, e.g. after the sign-up is confirmed and the
+// real user has been created.
 func (r *PendingRegistrationRepo) Delete(email string) error {
 	_, err := r.db.Exec(`DELETE FROM pending_registrations WHERE email = $1`, email)
 	return err

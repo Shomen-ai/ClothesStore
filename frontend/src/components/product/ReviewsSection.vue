@@ -1,3 +1,9 @@
+<!--
+  ReviewsSection: product-detail reviews block. Shows the rating summary (average +
+  count), the current user's own review with edit/delete, a create/edit form gated on
+  purchase eligibility, and the public list of reviews. Loads its own data (list +
+  per-user state) from the reviews API and reloads when the product changes.
+-->
 <template>
   <section class="reviews">
     <header class="rv-head">
@@ -41,9 +47,10 @@
         </div>
       </div>
 
-      <!-- form: new or editing -->
+      <!-- form: new or editing — shown when the user may post (eligible, no review yet) or is editing theirs -->
       <form v-else-if="(mine.eligible && !mine.own) || editing" class="rv-form" @submit.prevent="onSubmit">
         <p class="eyebrow">{{ editing ? 'Редактирование' : 'Оставить отзыв' }}</p>
+        <!-- Star rating picker: a star lights up if it's within the chosen rating or the current hover preview -->
         <div class="rv-stars rv-stars--picker" role="radiogroup" aria-label="Оценка">
           <button v-for="i in 5" :key="i" type="button"
                   class="star star--btn"
@@ -104,19 +111,21 @@ import { useAuthStore } from '@/stores/auth.js'
 import { getProductReviews, getMyReviewState, createReview, updateReview, deleteReview } from '@/api/reviews.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
+// productId: the product these reviews belong to (route param, hence Number|String).
 const props = defineProps({ productId: { type: [Number, String], required: true } })
 const auth = useAuthStore()
 
-const reviews = ref([])
-const summary = reactive({ avgRating: 0, count: 0 })
-const mine = reactive({ eligible: false, own: null })
+const reviews = ref([])                                  // public list of all reviews
+const summary = reactive({ avgRating: 0, count: 0 })     // aggregate rating shown in the header
+const mine = reactive({ eligible: false, own: null })    // eligible = may post (purchased); own = the user's existing review
 const loadingMine = ref(false)
-const editing = ref(false)
-const saving = ref(false)
+const editing = ref(false)                               // true while editing the user's own review
+const saving = ref(false)                                // submit in-flight guard (disables the button)
 const error = ref('')
-const hoverRating = ref(0)
+const hoverRating = ref(0)                               // star hover preview, 0 = not hovering
 const form = reactive({ rating: 0, text: '' })
 
+// Fetch the public reviews list + aggregate summary for this product.
 async function loadList() {
   try {
     const { data } = await getProductReviews(props.productId)
@@ -126,6 +135,8 @@ async function loadList() {
   } catch (e) { console.error(e) }
 }
 
+// Fetch the current user's review state (whether they're allowed to review and any
+// existing review). Skipped entirely for guests.
 async function loadMine() {
   if (!auth.isLoggedIn) { mine.eligible = false; mine.own = null; return }
   loadingMine.value = true
@@ -136,10 +147,13 @@ async function loadMine() {
   } catch (e) { console.error(e) } finally { loadingMine.value = false }
 }
 
+// Initial load: list and per-user state in parallel.
 onMounted(async () => {
   await Promise.all([loadList(), loadMine()])
 })
 
+// Reused across products (e.g. navigating between product pages): fully reset local
+// state before reloading, otherwise the previous product's reviews/form would linger.
 watch(() => props.productId, async () => {
   reviews.value = []; summary.avgRating = 0; summary.count = 0
   mine.eligible = false; mine.own = null
@@ -149,6 +163,7 @@ watch(() => props.productId, async () => {
 
 function resetForm() { form.rating = 0; form.text = ''; error.value = '' }
 
+// Enter edit mode, pre-filling the form from the user's existing review.
 function startEdit() {
   editing.value = true
   form.rating = mine.own.rating
@@ -157,6 +172,8 @@ function startEdit() {
 }
 function cancelEdit() { editing.value = false; resetForm() }
 
+// Create or update the user's review depending on edit mode, then refresh the list so
+// the aggregate/summary reflects the change. Server errors are surfaced inline.
 async function onSubmit() {
   if (!form.rating) { error.value = 'Поставь оценку'; return }
   saving.value = true; error.value = ''
@@ -178,6 +195,8 @@ async function onSubmit() {
   } finally { saving.value = false }
 }
 
+// Delete the user's own review after a confirm dialog (a rejected/cancelled confirm
+// throws, so the empty catch simply aborts), then refresh the list.
 async function onDelete() {
   try {
     await ElMessageBox.confirm('Удалить отзыв?', 'Подтверждение', { type: 'warning', confirmButtonText: 'Удалить', cancelButtonText: 'Отмена' })
@@ -192,10 +211,13 @@ async function onDelete() {
   }
 }
 
+// One decimal, comma as the decimal separator per ru-RU convention (e.g. "4,5").
 function formatAvg(v) { return Number(v).toFixed(1).replace('.', ',') }
 function formatDate(d) {
   return new Date(d).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })
 }
+// Russian plural rules for the review-count noun (отзыв / отзыва / отзывов),
+// using the standard mod-10 / mod-100 forms.
 function pluralize(n) {
   const mod10 = n % 10, mod100 = n % 100
   if (mod10 === 1 && mod100 !== 11) return 'отзыв'

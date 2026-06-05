@@ -1,3 +1,7 @@
+<!--
+  CheckoutSuccessView - confirmation screen shown after a successful payment
+  (route: /checkout-success). Static page; PaymentView redirects here on success.
+-->
 <template>
   <div class="success-page">
     <el-icon size="64" color="#3d8b3d"><CircleCheck /></el-icon>

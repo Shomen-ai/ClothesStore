@@ -23,6 +23,8 @@ const (
 	ColDate    // already-formatted date string; right-aligned, mono
 )
 
+// ReportSheet is one rendered Excel sheet: a titled table whose columns are
+// described by parallel Headers/ColTypes slices, with optional totalled columns.
 type ReportSheet struct {
 	Name       string
 	Headers    []string
@@ -52,6 +54,8 @@ func (r *ReportsRepo) queryRows(q string, args ...any) ([][]any, error) {
 		if err := rows.Scan(ptrs...); err != nil {
 			return nil, err
 		}
+		// lib/pq returns numeric/text columns as []byte; convert to string so
+		// the Excel layer sees readable values rather than byte slices.
 		for i, v := range raw {
 			if b, ok := v.([]byte); ok {
 				raw[i] = string(b)
@@ -67,6 +71,9 @@ func (r *ReportsRepo) queryRows(q string, args ...any) ([][]any, error) {
 // Summary is a flat key/value list; rendering as two text columns keeps it
 // human-readable even with mixed numeric types in the value column.
 func (r *ReportsRepo) Summary() (ReportSheet, error) {
+	// Every sub-aggregate is clamped at created_at <= NOW() so seeded future
+	// orders never inflate the totals; gross_revenue / discount / AOV also drop
+	// cancelled orders. COALESCE keeps sums at 0 when no rows match.
 	rows, err := r.queryRows(`
 		SELECT
 			(SELECT COUNT(*) FROM orders WHERE created_at <= NOW())                                            AS total_orders,
@@ -107,6 +114,8 @@ func (r *ReportsRepo) Summary() (ReportSheet, error) {
 	}, nil
 }
 
+// RevenueDaily reports orders/revenue/AOV per day over the trailing 90 days,
+// excluding cancelled orders and clamping the window at NOW().
 func (r *ReportsRepo) RevenueDaily() (ReportSheet, error) {
 	rows, err := r.queryRows(`
 		SELECT TO_CHAR(o.created_at::date, 'DD.MM.YYYY')         AS day,
@@ -132,6 +141,10 @@ func (r *ReportsRepo) RevenueDaily() (ReportSheet, error) {
 	}, nil
 }
 
+// RevenueByCategory aggregates line items up to their product's category.
+// Revenue uses price_at_order * quantity (the price captured at purchase time,
+// not the current product price); COUNT(DISTINCT o.id) avoids double-counting
+// an order that has several items in the same category.
 func (r *ReportsRepo) RevenueByCategory() (ReportSheet, error) {
 	rows, err := r.queryRows(`
 		SELECT c.name,
@@ -159,6 +172,8 @@ func (r *ReportsRepo) RevenueByCategory() (ReportSheet, error) {
 	}, nil
 }
 
+// RevenueByCity joins each order to its shipping address and aggregates
+// orders/revenue/AOV/unique-customers per city (cancelled excluded, clamped at NOW()).
 func (r *ReportsRepo) RevenueByCity() (ReportSheet, error) {
 	rows, err := r.queryRows(`
 		SELECT a.city,
@@ -185,6 +200,8 @@ func (r *ReportsRepo) RevenueByCity() (ReportSheet, error) {
 	}, nil
 }
 
+// TopProducts ranks the 30 highest-revenue products (revenue = sum of
+// price_at_order * quantity), with units sold and average sale price.
 func (r *ReportsRepo) TopProducts() (ReportSheet, error) {
 	rows, err := r.queryRows(`
 		SELECT p.name,
@@ -214,6 +231,8 @@ func (r *ReportsRepo) TopProducts() (ReportSheet, error) {
 	}, nil
 }
 
+// DeadStock lists up to 100 active products with no non-cancelled sale in the
+// last 60 days (NOT EXISTS over recent order_items), oldest first — the slow movers.
 func (r *ReportsRepo) DeadStock() (ReportSheet, error) {
 	rows, err := r.queryRows(`
 		SELECT p.name,
@@ -256,6 +275,10 @@ func (r *ReportsRepo) DeadStock() (ReportSheet, error) {
 	}, nil
 }
 
+// OrderFunnel breaks orders down by status with each status's share of the
+// total. The s CTE counts orders per status; tot holds the grand total so the
+// cross join (FROM s, tot) can compute cnt/total*100 per row. Status codes are
+// translated to Russian labels via CASE.
 func (r *ReportsRepo) OrderFunnel() (ReportSheet, error) {
 	rows, err := r.queryRows(`
 		WITH s AS (
@@ -287,6 +310,9 @@ func (r *ReportsRepo) OrderFunnel() (ReportSheet, error) {
 	}, nil
 }
 
+// CancellationByCategory computes per-category cancel rate. COUNT(*) FILTER
+// counts only cancelled rows; NULLIF(COUNT(*),0) guards the division so a
+// category with zero rows yields NULL rather than a divide-by-zero error.
 func (r *ReportsRepo) CancellationByCategory() (ReportSheet, error) {
 	rows, err := r.queryRows(`
 		SELECT c.name,
@@ -315,6 +341,11 @@ func (r *ReportsRepo) CancellationByCategory() (ReportSheet, error) {
 	}, nil
 }
 
+// PromoROI reports, per promo code, the revenue it drove vs the discount it
+// cost, plus an ROI ratio (revenue / discount). The LEFT JOIN keeps codes with
+// zero redemptions visible; its non-cancelled / NOW() predicates live in the ON
+// clause so unredeemed codes still appear (a WHERE would filter them out). ROI
+// is NULL when no discount was actually given (avoids divide-by-zero).
 func (r *ReportsRepo) PromoROI() (ReportSheet, error) {
 	rows, err := r.queryRows(`
 		SELECT pc.code,
@@ -343,6 +374,8 @@ func (r *ReportsRepo) PromoROI() (ReportSheet, error) {
 	}, nil
 }
 
+// TopCustomers ranks the 20 highest-spending customers (sum of non-cancelled
+// order totals), with order count, AOV and last-order date.
 func (r *ReportsRepo) TopCustomers() (ReportSheet, error) {
 	rows, err := r.queryRows(`
 		SELECT u.email,
@@ -370,6 +403,10 @@ func (r *ReportsRepo) TopCustomers() (ReportSheet, error) {
 	}, nil
 }
 
+// RFM buckets customers into marketing segments from Recency (days since last
+// order), Frequency (order count) and Monetary (total spend). The base CTE
+// derives the three metrics per customer; the outer CASE ladder maps them to a
+// segment label (VIP / Лояльный / Новый / Уходящий / Потерянный).
 func (r *ReportsRepo) RFM() (ReportSheet, error) {
 	rows, err := r.queryRows(`
 		WITH base AS (
@@ -408,6 +445,9 @@ func (r *ReportsRepo) RFM() (ReportSheet, error) {
 	}, nil
 }
 
+// Geo aggregates customers/orders/revenue per city. The LEFT JOIN to orders
+// keeps cities that have registered customers but no orders yet; its filters
+// sit in the ON clause so those zero-order cities are not dropped.
 func (r *ReportsRepo) Geo() (ReportSheet, error) {
 	rows, err := r.queryRows(`
 		SELECT a.city,
@@ -432,6 +472,10 @@ func (r *ReportsRepo) Geo() (ReportSheet, error) {
 	}, nil
 }
 
+// TopWishlisted ranks the 30 most-wishlisted products and a wish→purchase
+// conversion (units sold / wish count * 100). Units sold come from a LEFT JOIN
+// LATERAL subquery (correlated per product) so the per-product sum is computed
+// once and reused; conversion guards against zero wishes.
 func (r *ReportsRepo) TopWishlisted() (ReportSheet, error) {
 	rows, err := r.queryRows(`
 		SELECT p.name,
@@ -465,6 +509,8 @@ func (r *ReportsRepo) TopWishlisted() (ReportSheet, error) {
 	}, nil
 }
 
+// SaleVsRegular compares units/revenue/avg-price of on-sale vs regular-priced
+// products, grouping line items by the product's is_on_sale flag.
 func (r *ReportsRepo) SaleVsRegular() (ReportSheet, error) {
 	rows, err := r.queryRows(`
 		WITH t AS (
@@ -538,6 +584,11 @@ type SummaryKPIs struct {
 	SaleShare      float64 // percent of active products on sale
 }
 
+// KPIs returns the headline metrics for the cover sheet in one round trip:
+// total revenue, order count, AOV, customer/active-product counts and the
+// share of active products on sale. Each sub-select is COALESCEd to 0 (and
+// cast to float8 for the money/ratio fields); SaleShare uses NULLIF to avoid
+// dividing by zero when there are no active products.
 func (r *ReportsRepo) KPIs() (SummaryKPIs, error) {
 	var k SummaryKPIs
 	err := r.db.QueryRow(`

@@ -1,3 +1,9 @@
+// admin_report_handler.go builds and streams the branded Excel analytics report
+// served at GET /api/admin/reports/excel (admin-only). The handler pulls report
+// sheets and summary KPIs from the repository and renders them into a styled
+// .xlsx workbook (contents page, one sheet per report, a category chart and a
+// table of contents with hyperlinks). The bulk of this file is presentation:
+// excelize style construction and per-sheet layout.
 package handler
 
 import (
@@ -13,8 +19,10 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
+// AdminReportHandler serves the Excel report export, backed by the reports repo.
 type AdminReportHandler struct{ repo *repository.ReportsRepo }
 
+// NewAdminReportHandler constructs an AdminReportHandler backed by the given repo.
 func NewAdminReportHandler(repo *repository.ReportsRepo) *AdminReportHandler {
 	return &AdminReportHandler{repo: repo}
 }
@@ -76,6 +84,12 @@ type reportStyles struct {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Excel serves GET /api/admin/reports/excel and streams a generated .xlsx
+// workbook as a file download. It fetches all report sheets and summary KPIs,
+// builds the shared styles, renders the contents page and one sheet per report,
+// then writes the file to the response body. A failure before the body is
+// written yields 500 JSON; a failure during streaming (after headers are
+// flushed) can only be logged via Gin.
 func (h *AdminReportHandler) Excel(c *gin.Context) {
 	sheets, err := h.repo.AllSheets()
 	if err != nil {
@@ -140,6 +154,9 @@ func (h *AdminReportHandler) Excel(c *gin.Context) {
 
 // ─── styles ─────────────────────────────────────────────────────────────────
 
+// buildStyles registers every excelize cell style used by the report once and
+// returns them grouped in reportStyles. Body/zebra/totals styles are keyed by
+// ColType so number formats and alignment match each column's data type.
 func buildStyles(f *excelize.File) (*reportStyles, error) {
 	str := func(s string) *string { return &s }
 	s := &reportStyles{
@@ -313,6 +330,10 @@ func alignFor(t ColType) string {
 
 // ─── Contents sheet ─────────────────────────────────────────────────────────
 
+// renderContents lays out the "Содержание" landing sheet: title, generation
+// timestamp, a 3x2 grid of KPI cards and the table-of-contents skeleton. The
+// TOC hyperlink targets are filled in later by renderTOCLinks, once every report
+// sheet has been created.
 func renderContents(f *excelize.File, k repository.SummaryKPIs, sheets []ReportSheet, s *reportStyles) {
 	f.SetCellValue(contentsSheet, "A1", "Аналитический отчёт ClothesStore")
 	f.SetCellStyle(contentsSheet, "A1", "A1", s.pageTitle)
@@ -385,6 +406,9 @@ func renderContents(f *excelize.File, k repository.SummaryKPIs, sheets []ReportS
 	_ = f.SetSheetView(contentsSheet, 0, &excelize.ViewOptions{ShowGridLines: boolp(false)})
 }
 
+// renderTOCLinks writes the clickable table-of-contents rows linking to each
+// report sheet. It runs after all sheets exist so the internal hyperlinks
+// resolve.
 func renderTOCLinks(f *excelize.File, displayNames []string, s *reportStyles) {
 	for i, name := range displayNames {
 		row := 12 + i
@@ -403,6 +427,10 @@ func renderTOCLinks(f *excelize.File, displayNames []string, s *reportStyles) {
 
 // ─── Per-report sheet ───────────────────────────────────────────────────────
 
+// renderSheet renders a single report's data onto its sheet: title/subtitle,
+// header row, zebra-striped data rows, an optional SUM totals row for the
+// columns listed in TotalsCols, an auto-filter, data bars on money/int columns
+// and a frozen header pane.
 func renderSheet(f *excelize.File, name string, s ReportSheet, st *reportStyles) {
 	gen := time.Now().Format("02.01.2006 15:04")
 
@@ -507,6 +535,8 @@ func renderSheet(f *excelize.File, name string, s ReportSheet, st *reportStyles)
 
 // ─── chart ──────────────────────────────────────────────────────────────────
 
+// addCategoryChart draws a bar chart of revenue-by-category next to the table,
+// using the first column as categories and the last column as values.
 func addCategoryChart(f *excelize.File, sheet string, s ReportSheet) {
 	if len(s.Rows) == 0 {
 		return
@@ -573,6 +603,8 @@ func cellValue(v any, t ColType) any {
 	return v
 }
 
+// widthForCol estimates a column width from the header label and a sample of up
+// to the first 12 data rows, clamped per column type and capped at 52.
 func widthForCol(s ReportSheet, col int) float64 {
 	w := float64(len([]rune(s.Headers[col])) + 4)
 	switch colTypeAt(s, col) {
