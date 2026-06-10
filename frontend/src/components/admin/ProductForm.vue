@@ -59,11 +59,16 @@ const form = ref({ ...props.modelValue })
 const sizeQty = ref(Object.fromEntries(allSizes.map(s => [s, 0])))
 const localImages = ref(props.images || [])
 
-// When the parent swaps in a different product, refresh the form and rebuild size inputs.
-watch(() => props.modelValue, v => {
-  form.value = { ...v }
-  syncSizes(v?.sizes)
-}, { deep: true })
+// Seed the size inputs from the product once, at creation. The parent remounts
+// this component (via :key) whenever a different product/create is opened, so
+// this runs fresh for each one.
+//
+// We intentionally do NOT watch props.modelValue to re-seed `form`: the parent
+// binds it with v-model and the watchers below emit our edits back up, so
+// re-seeding `form` from that echo created an infinite update loop — every edit
+// bounced modelValue→form→emit→modelValue→… until Vue threw "Maximum recursive
+// updates exceeded" and the page froze.
+syncSizes(props.modelValue?.sizes)
 
 watch(() => props.images, v => { localImages.value = v || [] })
 

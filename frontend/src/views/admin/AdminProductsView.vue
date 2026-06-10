@@ -53,7 +53,9 @@
     <!-- Single dialog reused for create (editingId=null) and edit. ProductForm emits
          files-changed with the list of newly picked File objects to upload on save. -->
     <el-dialog v-model="dialogOpen" :title="editingId ? 'Редактировать товар' : 'Новый товар'" width="600px">
-      <ProductForm v-model="formData" :categories="categories" :product-id="editingId"
+      <!-- :key forces a fresh ProductForm instance per open so its internal state
+           is re-seeded cleanly and never echoes modelValue back into itself. -->
+      <ProductForm :key="formKey" v-model="formData" :categories="categories" :product-id="editingId"
         :images="editingImages" @files-changed="pendingFiles = $event" />
       <template #footer>
         <el-button @click="dialogOpen = false">Отмена</el-button>
@@ -76,6 +78,8 @@ const editingId = ref(null)
 const editingImages = ref([])
 const saving = ref(false)
 const pendingFiles = ref([])
+// Bumped on every dialog open to remount ProductForm with fresh internal state.
+const formKey = ref(0)
 // Factory for a blank product form (used for create and when resetting the dialog).
 const emptyForm = () => ({ name:'', description:'', category_id:null, price:0, is_active:true, is_on_sale:false, sizes:[] })
 const formData = ref(emptyForm())
@@ -91,6 +95,7 @@ onMounted(async () => {
 function openCreate() {
   editingId.value = null; editingImages.value = []; pendingFiles.value = []
   formData.value = emptyForm()
+  formKey.value++
   dialogOpen.value = true
 }
 
@@ -99,6 +104,7 @@ function openCreate() {
 function openEdit(p) {
   editingId.value = p.id; editingImages.value = p.images || []; pendingFiles.value = []
   formData.value = { ...p }
+  formKey.value++
   dialogOpen.value = true
 }
 
