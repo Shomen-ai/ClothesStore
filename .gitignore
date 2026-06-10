@@ -19,3 +19,8 @@ scripts/*.log
 # DB export for local restore — large images + real prod data (PII), never commit
 db_export/
 
+# Thesis (ВКР) documents — large binaries, not part of the codebase
+*.pdf
+*.docx
+*.pptx
+
