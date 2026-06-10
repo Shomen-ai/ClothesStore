@@ -16,3 +16,6 @@ scripts/__pycache__/
 scripts/venv/
 scripts/*.log
 
+# DB export for local restore — large images + real prod data (PII), never commit
+db_export/
+
