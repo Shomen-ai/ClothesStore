@@ -8,6 +8,7 @@ type Category struct {
 	Name      string `json:"name"`
 	Slug      string `json:"slug"`       // URL-friendly identifier used in catalogue routes
 	SortOrder int    `json:"sort_order"` // manual ordering for display in menus
+	TypeName  string `json:"type_name"`  // singular display type, e.g. "Футболка" for category "Футболки"
 }
 
 // ProductImage is one image belonging to a product gallery.
@@ -36,6 +37,7 @@ type Product struct {
 	Price       float64        `json:"price"`     // base price in rubles (float64)
 	IsActive    bool           `json:"is_active"` // false hides the product from the storefront
 	IsOnSale    bool           `json:"is_on_sale"`
+	TypeName    string         `json:"type_name,omitempty"` // category's singular type, for "<тип> <название>" display
 	CreatedAt   time.Time      `json:"created_at"`
 	Images      []ProductImage `json:"images,omitempty"` // hydrated on demand; omitted when not loaded
 	Sizes       []ProductSize  `json:"sizes,omitempty"`  // hydrated on demand; omitted when not loaded

@@ -27,9 +27,10 @@ func (r *OrderRepo) Create(o *model.Order, items []model.OrderItem) error {
 
 	// Insert the order header first so its id can be linked to every line item.
 	if err = tx.QueryRow(
-		`INSERT INTO orders(user_id,address_id,promo_code_id,status,total_price,discount_amount)
-		 VALUES($1,$2,$3,$4,$5,$6) RETURNING id`,
+		`INSERT INTO orders(user_id,address_id,promo_code_id,status,total_price,discount_amount,delivery_method,delivery_cost,recipient_name,payment_method,payment_status)
+		 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
 		o.UserID, o.AddressID, o.PromoCodeID, o.Status, o.TotalPrice, o.DiscountAmount,
+		o.DeliveryMethod, o.DeliveryCost, o.RecipientName, o.PaymentMethod, o.PaymentStatus,
 	).Scan(&o.ID); err != nil {
 		return err
 	}
@@ -67,7 +68,7 @@ func (r *OrderRepo) Create(o *model.Order, items []model.OrderItem) error {
 // items are not loaded here (see GetByID for the full order with items).
 func (r *OrderRepo) GetByUser(userID int64) ([]model.Order, error) {
 	rows, err := r.db.Query(
-		`SELECT id,user_id,address_id,promo_code_id,status,total_price,discount_amount,created_at
+		`SELECT id,user_id,address_id,promo_code_id,status,total_price,discount_amount,created_at,delivery_method,delivery_cost,recipient_name,payment_method,payment_status
 		 FROM orders WHERE user_id=$1 ORDER BY created_at DESC`, userID,
 	)
 	if err != nil {
@@ -83,18 +84,28 @@ func (r *OrderRepo) GetByID(id int64) (*model.Order, error) {
 	o := &model.Order{}
 	var promoID sql.NullInt64 // promo_code_id is nullable; map NULL → nil pointer
 	err := r.db.QueryRow(
-		`SELECT id,user_id,address_id,promo_code_id,status,total_price,discount_amount,created_at
+		`SELECT id,user_id,address_id,promo_code_id,status,total_price,discount_amount,created_at,delivery_method,delivery_cost,recipient_name,payment_method,payment_status
 		 FROM orders WHERE id=$1`, id,
-	).Scan(&o.ID, &o.UserID, &o.AddressID, &promoID, &o.Status, &o.TotalPrice, &o.DiscountAmount, &o.CreatedAt)
+	).Scan(&o.ID, &o.UserID, &o.AddressID, &promoID, &o.Status, &o.TotalPrice, &o.DiscountAmount, &o.CreatedAt,
+		&o.DeliveryMethod, &o.DeliveryCost, &o.RecipientName, &o.PaymentMethod, &o.PaymentStatus)
 	if err != nil {
 		return nil, err
 	}
 	if promoID.Valid {
 		o.PromoCodeID = &promoID.Int64 // only set the pointer when a promo was used
 	}
+	// Hydrate each line with product name/type/size and a thumbnail so the order
+	// card can render the item without extra requests.
 	rows, err := r.db.Query(
-		`SELECT id,order_id,product_id,product_size_id,quantity,price_at_order
-		 FROM order_items WHERE order_id=$1`, id,
+		`SELECT oi.id,oi.order_id,oi.product_id,oi.product_size_id,oi.quantity,oi.price_at_order,
+		        COALESCE(p.name,''), COALESCE(c.type_name,''), COALESCE(ps.size,''),
+		        COALESCE((SELECT image_path FROM product_images WHERE product_id=oi.product_id
+		                  ORDER BY is_primary DESC, sort_order LIMIT 1),'')
+		 FROM order_items oi
+		 LEFT JOIN products p ON p.id=oi.product_id
+		 LEFT JOIN categories c ON c.id=p.category_id
+		 LEFT JOIN product_sizes ps ON ps.id=oi.product_size_id
+		 WHERE oi.order_id=$1`, id,
 	)
 	if err != nil {
 		return nil, err
@@ -104,13 +115,23 @@ func (r *OrderRepo) GetByID(id int64) (*model.Order, error) {
 	for rows.Next() {
 		var item model.OrderItem
 		if err := rows.Scan(&item.ID, &item.OrderID, &item.ProductID,
-			&item.ProductSizeID, &item.Quantity, &item.PriceAtOrder); err != nil {
+			&item.ProductSizeID, &item.Quantity, &item.PriceAtOrder,
+			&item.ProductName, &item.TypeName, &item.Size, &item.ImagePath); err != nil {
 			return nil, err
 		}
 		o.Items = append(o.Items, item)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
+	}
+
+	// Best-effort hydration of the delivery address for the order card.
+	var a model.Address
+	if err := r.db.QueryRow(
+		`SELECT id,user_id,city,street,house,COALESCE(apartment,''),COALESCE(zip_code,''),is_default
+		 FROM addresses WHERE id=$1`, o.AddressID,
+	).Scan(&a.ID, &a.UserID, &a.City, &a.Street, &a.House, &a.Apartment, &a.ZipCode, &a.IsDefault); err == nil {
+		o.Address = &a
 	}
 	return o, nil
 }
@@ -120,7 +141,7 @@ func (r *OrderRepo) GetByID(id int64) (*model.Order, error) {
 // clause be appended with a leading AND, and the $N placeholder counter (i) is
 // advanced only for the predicates actually present so positional args line up.
 func (r *OrderRepo) GetAll(status, dateFrom, dateTo string) ([]model.Order, error) {
-	query := `SELECT id,user_id,address_id,promo_code_id,status,total_price,discount_amount,created_at
+	query := `SELECT id,user_id,address_id,promo_code_id,status,total_price,discount_amount,created_at,delivery_method,delivery_cost,recipient_name,payment_method,payment_status
 	          FROM orders WHERE 1=1`
 	args := []any{}
 	i := 1
@@ -129,15 +150,17 @@ func (r *OrderRepo) GetAll(status, dateFrom, dateTo string) ([]model.Order, erro
 		args = append(args, status)
 		i++
 	}
+	// created_at is stored in UTC, but the UI shows (and the admin picks) Moscow dates.
+	// Compare on the Moscow calendar date so the filter matches the dates on screen —
+	// otherwise an order made late UTC (e.g. 21:43) counts as the previous day here but
+	// renders as the next day in the UI, leaking an extra day into the results.
 	if dateFrom != "" {
-		// Inclusive lower bound, compared on the date part only.
-		query += fmt.Sprintf(" AND created_at >= $%d::date", i)
+		query += fmt.Sprintf(" AND (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Moscow')::date >= $%d::date", i)
 		args = append(args, dateFrom)
 		i++
 	}
 	if dateTo != "" {
-		// Exclusive upper bound at the start of the next day, so the whole dateTo day is included.
-		query += fmt.Sprintf(" AND created_at < ($%d::date + INTERVAL '1 day')", i)
+		query += fmt.Sprintf(" AND (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Moscow')::date <= $%d::date", i)
 		args = append(args, dateTo)
 	}
 	query += " ORDER BY created_at DESC"
@@ -155,6 +178,13 @@ func (r *OrderRepo) UpdateStatus(id int64, status string) error {
 	return err
 }
 
+// ConfirmPaid marks an order as paid and advances it to confirmed — used by the
+// payment-stub confirmation for online card payments.
+func (r *OrderRepo) ConfirmPaid(id int64) error {
+	_, err := r.db.Exec(`UPDATE orders SET status='confirmed', payment_status='paid' WHERE id=$1`, id)
+	return err
+}
+
 // scanOrders materialises order header rows, mapping the nullable promo_code_id
 // into the optional pointer field. Shared by GetByUser and GetAll.
 func scanOrders(rows *sql.Rows) ([]model.Order, error) {
@@ -163,7 +193,8 @@ func scanOrders(rows *sql.Rows) ([]model.Order, error) {
 		var o model.Order
 		var promoID sql.NullInt64
 		if err := rows.Scan(&o.ID, &o.UserID, &o.AddressID, &promoID, &o.Status,
-			&o.TotalPrice, &o.DiscountAmount, &o.CreatedAt); err != nil {
+			&o.TotalPrice, &o.DiscountAmount, &o.CreatedAt,
+			&o.DeliveryMethod, &o.DeliveryCost, &o.RecipientName, &o.PaymentMethod, &o.PaymentStatus); err != nil {
 			return nil, err
 		}
 		if promoID.Valid {

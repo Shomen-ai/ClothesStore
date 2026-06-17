@@ -117,7 +117,7 @@ func (h *OrderHandler) ConfirmPayment(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": "заказ отменён"})
 		return
 	case "pending":
-		if err := h.orderRepo.UpdateStatus(id, "confirmed"); err != nil {
+		if err := h.orderRepo.ConfirmPaid(id); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}

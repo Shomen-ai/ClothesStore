@@ -17,7 +17,7 @@ func NewProductRepo(db *sql.DB) *ProductRepo { return &ProductRepo{db: db} }
 
 // GetCategories returns all categories in their configured display order.
 func (r *ProductRepo) GetCategories() ([]model.Category, error) {
-	rows, err := r.db.Query(`SELECT id,name,slug,sort_order FROM categories ORDER BY sort_order`)
+	rows, err := r.db.Query(`SELECT id,name,slug,sort_order,COALESCE(type_name,'') FROM categories ORDER BY sort_order`)
 	if err != nil {
 		return nil, err
 	}
@@ -25,7 +25,7 @@ func (r *ProductRepo) GetCategories() ([]model.Category, error) {
 	cats := make([]model.Category, 0)
 	for rows.Next() {
 		var c model.Category
-		if err := rows.Scan(&c.ID, &c.Name, &c.Slug, &c.SortOrder); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.Slug, &c.SortOrder, &c.TypeName); err != nil {
 			return nil, err
 		}
 		cats = append(cats, c)
@@ -95,8 +95,10 @@ func (r *ProductRepo) List(f ProductFilter) ([]model.Product, error) {
 		i++
 	}
 	if f.Search != "" {
-		// Case-insensitive substring match on the product name.
-		where = append(where, fmt.Sprintf("LOWER(p.name) LIKE $%d", i))
+		// Case-insensitive match on "<type> <name>", the bare name, and the category
+		// name, so e.g. "Футболка", "Valor" and "Футболка Valor" all find the product.
+		where = append(where, fmt.Sprintf(
+			"(LOWER(COALESCE(c.type_name,'') || ' ' || p.name) LIKE $%d OR LOWER(p.name) LIKE $%d OR LOWER(c.name) LIKE $%d)", i, i, i))
 		args = append(args, "%"+strings.ToLower(f.Search)+"%")
 		i++
 	}
@@ -134,7 +136,7 @@ func (r *ProductRepo) List(f ProductFilter) ([]model.Product, error) {
 	// LEFT JOIN categories so products with no category still appear; the join
 	// also exposes c.sort_order for the default ordering.
 	query := fmt.Sprintf(
-		`SELECT p.id,p.category_id,p.name,p.description,p.price,p.is_active,p.is_on_sale,p.created_at
+		`SELECT p.id,p.category_id,p.name,p.description,p.price,p.is_active,p.is_on_sale,COALESCE(c.type_name,''),p.created_at
 		 FROM products p
 		 LEFT JOIN categories c ON c.id = p.category_id
 		 WHERE %s ORDER BY %s
@@ -153,7 +155,7 @@ func (r *ProductRepo) List(f ProductFilter) ([]model.Product, error) {
 	for rows.Next() {
 		var p model.Product
 		if err := rows.Scan(&p.ID, &p.CategoryID, &p.Name, &p.Description,
-			&p.Price, &p.IsActive, &p.IsOnSale, &p.CreatedAt); err != nil {
+			&p.Price, &p.IsActive, &p.IsOnSale, &p.TypeName, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		products = append(products, p)
@@ -217,8 +219,9 @@ func buildInQuery(template string, ids []int64) (string, []any) {
 func (r *ProductRepo) GetByID(id int64) (*model.Product, error) {
 	p := &model.Product{}
 	err := r.db.QueryRow(
-		`SELECT id,category_id,name,description,price,is_active,is_on_sale,created_at FROM products WHERE id=$1`, id,
-	).Scan(&p.ID, &p.CategoryID, &p.Name, &p.Description, &p.Price, &p.IsActive, &p.IsOnSale, &p.CreatedAt)
+		`SELECT p.id,p.category_id,p.name,p.description,p.price,p.is_active,p.is_on_sale,COALESCE(c.type_name,''),p.created_at
+		 FROM products p LEFT JOIN categories c ON c.id=p.category_id WHERE p.id=$1`, id,
+	).Scan(&p.ID, &p.CategoryID, &p.Name, &p.Description, &p.Price, &p.IsActive, &p.IsOnSale, &p.TypeName, &p.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -342,10 +345,11 @@ func (r *ProductRepo) GetFeatured() (hits []model.Product, newest []model.Produc
 	// Join products against per-product ordered-quantity totals; ordering by that
 	// summed quantity descending yields the best-sellers.
 	hitRows, err := r.db.Query(
-		`SELECT p.id,p.category_id,p.name,p.description,p.price,p.is_active,p.is_on_sale,p.created_at
+		`SELECT p.id,p.category_id,p.name,p.description,p.price,p.is_active,p.is_on_sale,COALESCE(c.type_name,''),p.created_at
 		 FROM products p
 		 JOIN (SELECT product_id, SUM(quantity) qty FROM order_items GROUP BY product_id) oi
 		   ON oi.product_id=p.id
+		 LEFT JOIN categories c ON c.id=p.category_id
 		 WHERE p.is_active=true
 		 ORDER BY oi.qty DESC
 		 LIMIT 5`,
@@ -357,7 +361,7 @@ func (r *ProductRepo) GetFeatured() (hits []model.Product, newest []model.Produc
 	for hitRows.Next() {
 		var p model.Product
 		if err := hitRows.Scan(&p.ID, &p.CategoryID, &p.Name, &p.Description,
-			&p.Price, &p.IsActive, &p.IsOnSale, &p.CreatedAt); err != nil {
+			&p.Price, &p.IsActive, &p.IsOnSale, &p.TypeName, &p.CreatedAt); err != nil {
 			return nil, nil, err
 		}
 		hits = append(hits, p)
@@ -367,8 +371,9 @@ func (r *ProductRepo) GetFeatured() (hits []model.Product, newest []model.Produc
 	}
 
 	newRows, err := r.db.Query(
-		`SELECT id,category_id,name,description,price,is_active,is_on_sale,created_at FROM products
-		 WHERE is_active=true ORDER BY created_at DESC LIMIT 5`,
+		`SELECT p.id,p.category_id,p.name,p.description,p.price,p.is_active,p.is_on_sale,COALESCE(c.type_name,''),p.created_at
+		 FROM products p LEFT JOIN categories c ON c.id=p.category_id
+		 WHERE p.is_active=true ORDER BY p.created_at DESC LIMIT 5`,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -377,7 +382,7 @@ func (r *ProductRepo) GetFeatured() (hits []model.Product, newest []model.Produc
 	for newRows.Next() {
 		var p model.Product
 		if err := newRows.Scan(&p.ID, &p.CategoryID, &p.Name, &p.Description,
-			&p.Price, &p.IsActive, &p.IsOnSale, &p.CreatedAt); err != nil {
+			&p.Price, &p.IsActive, &p.IsOnSale, &p.TypeName, &p.CreatedAt); err != nil {
 			return nil, nil, err
 		}
 		newest = append(newest, p)
