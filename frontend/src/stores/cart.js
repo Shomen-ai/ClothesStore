@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { productTitle } from '@/utils/product.js'
 
 export const useCartStore = defineStore('cart', () => {
   // Cart line items, rehydrated from localStorage so the cart survives reloads.
@@ -29,7 +30,7 @@ export const useCartStore = defineStore('cart', () => {
       items.value.push({
         product_id: product.id,
         product_size_id: sizeID,
-        name: product.name,
+        name: productTitle(product),
         size: sizeName,
         price: product.price,
         quantity: 1,

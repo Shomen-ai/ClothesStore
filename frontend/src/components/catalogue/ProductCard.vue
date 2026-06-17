@@ -28,7 +28,7 @@
     </div>
 
     <div class="meta">
-      <p class="name">{{ product.name }}</p>
+      <p class="name">{{ productTitle(product) }}</p>
       <p class="price">
         {{ formatPrice(product.price) }}
         <span class="price-unit">RUB</span>
@@ -40,6 +40,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useWishlistStore } from '@/stores/wishlist.js'
+import { productTitle } from '@/utils/product.js'
 
 // product: the catalogue item to render (id, name, price, is_on_sale, images[]).
 const props = defineProps({ product: Object })

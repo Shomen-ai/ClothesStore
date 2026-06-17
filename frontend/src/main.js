@@ -4,6 +4,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
+import ru from 'element-plus/es/locale/lang/ru' // Russian locale for Element Plus (date picker months/weekdays, etc.)
 import * as ElIcons from '@element-plus/icons-vue'
 import App from './App.vue'
 import router from './router/index.js'
@@ -12,7 +13,7 @@ import { useThemeStore } from './stores/theme.js'
 
 const app = createApp(App)
 app.use(createPinia())                       // global state container (must be installed before any store is used)
-app.use(ElementPlus, { size: 'default' })    // Element Plus component library
+app.use(ElementPlus, { size: 'default', locale: ru })    // Element Plus component library (Russian locale)
 app.use(router)                              // client-side routing
 
 // Register every Element Plus icon as a global component (e.g. <Close />, used in ProductForm).

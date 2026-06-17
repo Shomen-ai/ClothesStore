@@ -17,7 +17,7 @@
         <el-option v-for="s in statuses" :key="s.value" :value="s.value" :label="s.label" />
       </el-select>
       <el-date-picker v-model="dateRange" type="daterange" start-placeholder="От" end-placeholder="До"
-        value-format="YYYY-MM-DD" @change="load" style="width:280px" />
+        format="DD.MM.YYYY" value-format="YYYY-MM-DD" @change="load" style="width:280px" />
     </div>
 
     <el-table :data="orders">
@@ -77,7 +77,8 @@ async function changeStatus(row, status) {
 }
 
 function formatDate(d) { return new Date(d).toLocaleDateString('ru-RU') }
-function formatPrice(p) { return new Intl.NumberFormat('ru-RU',{style:'currency',currency:'RUB',maximumFractionDigits:0}).format(p) }
+// «Сумма» column shows the number without a currency symbol (per request).
+function formatPrice(p) { return new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(p) }
 </script>
 
 <style scoped>

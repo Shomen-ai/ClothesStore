@@ -20,9 +20,11 @@
     <el-form-item label="Распродажа (SALE)"><el-switch v-model="form.is_on_sale" /></el-form-item>
 
     <el-form-item label="Размеры и остатки">
-      <div v-for="s in allSizes" :key="s" class="size-row">
-        <span class="size-label">{{ s }}</span>
-        <el-input-number v-model="sizeQty[s]" :min="0" size="small" />
+      <div class="size-grid">
+        <div v-for="s in sizeOrder" :key="s" class="size-row">
+          <span class="size-label">{{ s }}</span>
+          <el-input-number v-model="sizeQty[s]" :min="0" size="small" />
+        </div>
       </div>
     </el-form-item>
 
@@ -52,11 +54,19 @@ import { adminDeleteImage } from '@/api/admin.js'
 const props = defineProps({ modelValue: Object, categories: Array, productId: Number, images: Array })
 const emit = defineEmits(['update:modelValue', 'files-changed'])
 
-const allSizes = ['XS', 'S', 'M', 'L', 'XL', 'XXL']
+// Standard size set offered for every product (note: the data uses "2XL", not "XXL").
+const STD_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL']
 // Local working copy of the product fields (spread so we don't mutate the prop object).
 const form = ref({ ...props.modelValue })
 // Stock quantity per size, kept as a flat {size: qty} map for easy binding to the inputs.
-const sizeQty = ref(Object.fromEntries(allSizes.map(s => [s, 0])))
+const sizeQty = ref({})
+// Ordered list of size rows: standard sizes first, then any non-standard sizes the
+// product actually has (e.g. "42-44" for socks), so real stock is always editable.
+const sizeOrder = ref([...STD_SIZES])
+// Sizes the product already had on open. These are always sent on save (even at 0)
+// so the admin can set a size out of stock — the backend upserts (never deletes),
+// and filtering 0 out would otherwise leave the old stock untouched.
+const originalSizes = ref(new Set())
 const localImages = ref(props.images || [])
 
 // Seed the size inputs from the product once, at creation. The parent remounts
@@ -81,15 +91,22 @@ watch(sizeQty, () => emit('update:modelValue', { ...form.value, sizes: buildSize
 // Reset all size inputs to 0, then fill from the product's existing sizes (ignoring any
 // unknown size keys not in allSizes).
 function syncSizes(sizes) {
-  allSizes.forEach(s => { sizeQty.value[s] = 0 })
-  if (!sizes) return
-  sizes.forEach(s => { if (s.size in sizeQty.value) sizeQty.value[s.size] = s.stock_qty })
+  const map = {}
+  STD_SIZES.forEach(s => { map[s] = 0 })
+  ;(sizes || []).forEach(s => { map[s.size] = s.stock_qty }) // include every actual size, even non-standard
+  sizeQty.value = map
+  originalSizes.value = new Set((sizes || []).map(s => s.size))
+  const extra = (sizes || []).map(s => s.size).filter(s => !STD_SIZES.includes(s))
+  sizeOrder.value = [...STD_SIZES, ...new Set(extra)]
 }
 
 // Collapse the {size: qty} map into the API's [{size, stock_qty}] shape, dropping zero-stock sizes.
 function buildSizes() {
+  // Send a size if it has stock OR it already existed on the product (so setting it
+  // to 0 persists as out-of-stock instead of being silently dropped). New standard
+  // sizes left at 0 are skipped so we don't create phantom out-of-stock rows.
   return Object.entries(sizeQty.value)
-    .filter(([, qty]) => qty > 0)
+    .filter(([size, qty]) => qty > 0 || originalSizes.value.has(size))
     .map(([size, stock_qty]) => ({ size, stock_qty }))
 }
 
@@ -106,8 +123,10 @@ async function deleteImg(imgId) {
 </script>
 
 <style scoped>
-.size-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
-.size-label { width: 36px; font-size: 13px; }
+.size-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px 16px; width: 100%; }
+.size-row { display: flex; align-items: center; gap: 10px; }
+.size-label { width: 40px; flex-shrink: 0; font-size: 13px; }
+.size-row :deep(.el-input-number) { width: 100%; }
 .images-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
 .img-thumb { position: relative; width: 80px; height: 100px; }
 .img-thumb img { width: 100%; height: 100%; object-fit: cover; }

@@ -25,7 +25,9 @@
           <div v-else style="width:48px;height:64px;background:var(--color-bg-elevated);" />
         </template>
       </el-table-column>
-      <el-table-column prop="name" label="Название" />
+      <el-table-column label="Название">
+        <template #default="{ row }">{{ productTitle(row) }}</template>
+      </el-table-column>
       <el-table-column label="Цена" width="120">
         <template #default="{ row }">{{ formatPrice(row.price) }}</template>
       </el-table-column>
@@ -68,6 +70,9 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { adminListProducts, adminCreateProduct, adminUpdateProduct, adminDeleteProduct, adminUploadImages, adminGetCategories } from '@/api/admin.js'
+// The admin product list omits per-size stock; fetch the full product (incl. sizes) when editing.
+import { getProduct } from '@/api/catalogue.js'
+import { productTitle } from '@/utils/product.js'
 import ProductForm from '@/components/admin/ProductForm.vue'
 import { ElMessageBox } from 'element-plus'
 
@@ -101,9 +106,11 @@ function openCreate() {
 
 // Open the dialog in edit mode: seed it with a clone of the row (so live edits don't
 // mutate the table) and pass through the product's existing images.
-function openEdit(p) {
-  editingId.value = p.id; editingImages.value = p.images || []; pendingFiles.value = []
-  formData.value = { ...p }
+async function openEdit(p) {
+  // Fetch the full product so per-size stock (absent from the list payload) is shown.
+  const { data } = await getProduct(p.id)
+  editingId.value = p.id; editingImages.value = data.images || []; pendingFiles.value = []
+  formData.value = { ...data }
   formKey.value++
   dialogOpen.value = true
 }

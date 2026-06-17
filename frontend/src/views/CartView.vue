@@ -67,8 +67,11 @@
           </span>
           <span class="num">−{{ formatPrice(cart.discount) }}</span>
         </div>
+        <div class="sum-row">
+          <span>Доставка</span><span class="num">{{ deliveryCost ? formatPrice(deliveryCost) : 'бесплатно' }}</span>
+        </div>
         <div class="sum-row total">
-          <span>К оплате</span><span class="num big">{{ formatPrice(cart.finalTotal) }}</span>
+          <span>К оплате</span><span class="num big">{{ formatPrice(grandTotal) }}</span>
         </div>
 
         <div class="promo">
@@ -87,6 +90,27 @@
               {{ a.city }}, {{ a.street }} {{ a.house }}{{ a.apartment ? `, кв.${a.apartment}` : '' }}
             </option>
           </select>
+        </div>
+
+        <div v-if="auth.isLoggedIn" class="address">
+          <p class="address-label eyebrow">Способ доставки</p>
+          <select v-model="deliveryMethod" class="address-select">
+            <option v-for="d in DELIVERY" :key="d.value" :value="d.value">
+              {{ d.label }} — {{ d.cost ? d.cost + ' ₽' : 'бесплатно' }}
+            </option>
+          </select>
+        </div>
+
+        <div v-if="auth.isLoggedIn" class="address">
+          <p class="address-label eyebrow">Способ оплаты</p>
+          <select v-model="paymentMethod" class="address-select">
+            <option v-for="p in PAYMENTS" :key="p.value" :value="p.value">{{ p.label }}</option>
+          </select>
+        </div>
+
+        <div v-if="auth.isLoggedIn" class="address">
+          <p class="address-label eyebrow">Получатель</p>
+          <input v-model="recipient" class="address-select" placeholder="ФИО получателя" />
         </div>
 
         <button class="btn btn-primary checkout" :disabled="!canOrder || ordering" @click="placeOrder">
@@ -108,7 +132,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCartStore } from '@/stores/cart.js'
 import { useAuthStore } from '@/stores/auth.js'
-import { getAddresses } from '@/api/user.js'
+import { getAddresses, getProfile } from '@/api/user.js'
 import { validatePromo as apiValidatePromo, createOrder } from '@/api/orders.js'
 import CartItem from '@/components/cart/CartItem.vue'
 
@@ -125,17 +149,40 @@ const promoError = ref('')
 const promoLoading = ref(false)
 const ordering = ref(false)
 
-// Checkout is allowed only when logged in, an address is chosen, and the cart is non-empty.
-const canOrder = computed(() => auth.isLoggedIn && selectedAddressID.value && cart.items.length > 0)
+// Delivery and payment options. Delivery costs mirror the server (which is the
+// source of truth for the charged amount); these drive the UI preview + total.
+const DELIVERY = [
+  { value: 'courier', label: 'Курьерская доставка', cost: 500 },
+  { value: 'post',    label: 'Почта России',        cost: 350 },
+  { value: 'pickup',  label: 'Самовывоз',           cost: 0 },
+]
+const PAYMENTS = [
+  { value: 'card_online', label: 'Картой онлайн' },
+  { value: 'on_delivery', label: 'При получении' },
+]
+const deliveryMethod = ref('courier')
+const paymentMethod = ref('card_online')
+const recipient = ref('')
 
-// Preload the user's saved addresses and preselect their default one.
+const deliveryCost = computed(() => DELIVERY.find(d => d.value === deliveryMethod.value)?.cost || 0)
+const grandTotal = computed(() => cart.finalTotal + deliveryCost.value)
+
+// Checkout requires login, an address, delivery+payment method, a recipient, and a non-empty cart.
+const canOrder = computed(() =>
+  auth.isLoggedIn && selectedAddressID.value && deliveryMethod.value &&
+  paymentMethod.value && recipient.value.trim() && cart.items.length > 0)
+
+// Preload saved addresses (preselecting the default) and prefill the recipient from the profile.
 onMounted(async () => {
-  if (auth.isLoggedIn) {
-    const { data } = await getAddresses()
-    addresses.value = data || []
-    const def = addresses.value.find(a => a.is_default)
-    if (def) selectedAddressID.value = def.id
-  }
+  if (!auth.isLoggedIn) return
+  const { data } = await getAddresses()
+  addresses.value = data || []
+  const def = addresses.value.find(a => a.is_default)
+  if (def) selectedAddressID.value = def.id
+  try {
+    const prof = await getProfile()
+    recipient.value = prof.data?.name || ''
+  } catch { /* profile is optional for prefilling */ }
 })
 
 // Validate the promo against the current subtotal on the server; on success the
@@ -161,12 +208,16 @@ async function placeOrder() {
     const { data } = await createOrder({
       address_id: selectedAddressID.value,
       promo_code: cart.promoCode || undefined,
+      delivery_method: deliveryMethod.value,
+      payment_method: paymentMethod.value,
+      recipient_name: recipient.value.trim(),
       items: cart.items.map(i => ({ product_size_id: i.product_size_id, quantity: i.quantity }))
     })
     cart.clear()
-    // The order is created with status 'pending' (awaiting payment); the
-    // payment page takes it through the stub flow to 'confirmed'.
-    router.push(`/payment/${data.id}`)
+    // Card payments go through the payment stub; pay-on-delivery orders are already
+    // confirmed server-side, so jump straight to the order page.
+    if (paymentMethod.value === 'card_online') router.push(`/payment/${data.id}`)
+    else router.push(`/account/orders/${data.id}`)
   } catch (e) {
     console.error(e)
   } finally {

@@ -8,7 +8,7 @@
     <nav class="breadcrumbs">
       <RouterLink to="/catalogue">Каталог</RouterLink>
       <span class="sep">/</span>
-      <span class="muted">{{ product.name }}</span>
+      <span class="muted">{{ productTitle(product) }}</span>
     </nav>
 
     <div class="layout">
@@ -37,7 +37,7 @@
       <!-- Info column (sticky) -->
       <div class="info">
         <span class="eyebrow">{{ categoryName }}</span>
-        <h1 class="title">{{ product.name }}</h1>
+        <h1 class="title">{{ productTitle(product) }}</h1>
 
         <div class="price-row">
           <span class="price">{{ formatPrice(product.price) }}</span>
@@ -57,18 +57,22 @@
                     class="size"
                     :class="{ selected: selectedSize?.id === s.id, gone: s.stock_qty === 0 }"
                     :disabled="s.stock_qty === 0"
+                    :title="s.stock_qty === 0 ? 'Нет в наличии' : 'В наличии: ' + s.stock_qty + ' шт.'"
                     @click="selectedSize = s">
-              {{ s.size }}
+              <span class="size-val">{{ s.size }}</span>
+              <span v-if="s.stock_qty === 0" class="size-oos">нет</span>
               <span v-if="s.stock_qty === 0" class="strike"></span>
             </button>
           </div>
           <p v-if="!product.sizes?.length" class="no-sizes">Без размеров — одинарная позиция.</p>
+          <p v-else-if="allOutOfStock" class="size-status oos">Нет в наличии</p>
+          <p v-else-if="selectedSize" class="size-status">В наличии: {{ selectedSize.stock_qty }} шт.</p>
         </div>
 
         <div class="actions">
-          <button class="btn btn-primary cta" :disabled="!selectedSize && product.sizes?.length" @click="addToCart">
-            <span>В корзину</span>
-            <span class="cta-arrow">→</span>
+          <button class="btn btn-primary cta" :disabled="allOutOfStock || (!selectedSize && product.sizes?.length)" @click="addToCart">
+            <span>{{ allOutOfStock ? 'Нет в наличии' : 'В корзину' }}</span>
+            <span v-if="!allOutOfStock" class="cta-arrow">→</span>
           </button>
           <button class="wish-btn" :class="{ active: inWishlist }" @click="wishlist.toggle(product.id)" aria-label="В избранное">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -104,6 +108,7 @@ import { useCartStore } from '@/stores/cart.js'
 import { useWishlistStore } from '@/stores/wishlist.js'
 import { ElMessage } from 'element-plus'
 import ReviewsSection from '@/components/product/ReviewsSection.vue'
+import { productTitle } from '@/utils/product.js'
 
 const route = useRoute()
 const cart = useCartStore()
@@ -117,6 +122,12 @@ const activeImage = ref('')
 // Reactive wishlist membership and category label, derived from loaded data.
 const inWishlist = computed(() => wishlist.has(product.value?.id))
 const categoryName = computed(() => categories.value.find(c => c.id === product.value?.category_id)?.name || '—')
+// True when the product has sizes but every one is out of stock — used to disable
+// the add-to-cart button and surface a clear "Нет в наличии" message.
+const allOutOfStock = computed(() => {
+  const s = product.value?.sizes
+  return Array.isArray(s) && s.length > 0 && s.every(x => x.stock_qty === 0)
+})
 
 // Fetch one product, default the gallery to its primary (or first) image,
 // and reset any previously chosen size.
@@ -273,6 +284,7 @@ function formatPrice(p) {
 .size {
   position: relative;
   min-width: 50px; height: 44px; padding: 0 12px;
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
   font: 500 12px/1 var(--font-mono);
   letter-spacing: 0.06em;
   color: var(--text-soft);
@@ -281,6 +293,9 @@ function formatPrice(p) {
   cursor: pointer;
   transition: all .15s ease;
 }
+.size-oos { font: 500 8px/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--sale); }
+.size-status { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.size-status.oos { color: var(--sale); }
 .size:hover:not(:disabled) { border-color: var(--text-muted); color: var(--text); }
 .size.selected {
   border-color: var(--accent);

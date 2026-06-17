@@ -213,8 +213,9 @@ async function onDelete() {
 
 // One decimal, comma as the decimal separator per ru-RU convention (e.g. "4,5").
 function formatAvg(v) { return Number(v).toFixed(1).replace('.', ',') }
+// Unified date format across the app: DD.MM.YYYY.
 function formatDate(d) {
-  return new Date(d).toLocaleDateString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric' })
+  return new Date(d).toLocaleDateString('ru-RU')
 }
 // Russian plural rules for the review-count noun (отзыв / отзыва / отзывов),
 // using the standard mod-10 / mod-100 forms.
